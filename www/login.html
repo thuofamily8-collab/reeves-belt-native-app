@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#0a192f">
+    <title>Login - Reeves Belt Guard</title>
+    <link rel="stylesheet" href="css/app.css">
+</head>
+<body class="login-page">
+    <div class="login-container">
+        <img src="assets/logo.png" alt="Reeves Belt" class="login-logo" onerror="this.style.display='none'">
+
+        <div class="login-brand">
+            <div class="login-brand-main">REEVES BELT</div>
+            <div class="login-brand-sub">SECURE 360</div>
+        </div>
+
+        <h2 class="login-title">Sign In</h2>
+
+        <div id="loginError" class="error-box" style="display:none;"></div>
+
+        <form id="loginForm" autocomplete="off">
+            <div class="input-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" placeholder="Enter your username" required autocomplete="username">
+            </div>
+
+            <div class="input-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" placeholder="Enter your password" required autocomplete="current-password">
+            </div>
+
+            <button type="submit" id="loginBtn" class="login-btn">
+                <span id="loginBtnText">LOGIN</span>
+            </button>
+        </form>
+
+        <div class="login-footer">
+            © 2026 REEVES BELT SECURITY CO.<br>
+            <strong>Powered by Lexans Services</strong>
+        </div>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // If already logged in, go straight to dashboard
+            if (RBAuth.isLoggedIn()) {
+                window.location.href = 'dashboard.html';
+                return;
+            }
+
+            var form = document.getElementById('loginForm');
+            var btn = document.getElementById('loginBtn');
+            var btnText = document.getElementById('loginBtnText');
+            var errorBox = document.getElementById('loginError');
+
+            form.addEventListener('submit', function(e) {
+                e.preventDefault();
+
+                var username = document.getElementById('username').value.trim();
+                var password = document.getElementById('password').value;
+
+                if (!username || !password) {
+                    errorBox.textContent = 'Please enter username and password';
+                    errorBox.style.display = 'block';
+                    return;
+                }
+
+                errorBox.style.display = 'none';
+                btn.disabled = true;
+                btnText.innerHTML = '<span class="spinner"></span>SIGNING IN...';
+
+                // Get device info
+                var deviceInfo = {
+                    device_id: 'android-' + Date.now(),
+                    device_name: 'Android Device',
+                    device_platform: 'android'
+                };
+
+                if (window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.Device) {
+                    Capacitor.Plugins.Device.getInfo().then(function(info) {
+                        deviceInfo.device_name = (info.manufacturer || '') + ' ' + (info.model || 'Device');
+                        deviceInfo.device_platform = info.platform || 'android';
+                    }).catch(function() {}).then(doLogin);
+                } else {
+                    doLogin();
+                }
+
+                function doLogin() {
+                    RBApi.login(username, password, deviceInfo)
+                        .then(function(response) {
+                            RBAuth.saveSession(response);
+
+                            // Vibrate to confirm
+                            if (navigator.vibrate) navigator.vibrate(100);
+
+                            btnText.textContent = 'SUCCESS!';
+                            setTimeout(function() {
+                                window.location.href = 'dashboard.html';
+                            }, 400);
+                        })
+                        .catch(function(err) {
+                            errorBox.textContent = '❌ ' + (err.error || 'Login failed. Check your credentials.');
+                            errorBox.style.display = 'block';
+                            btn.disabled = false;
+                            btnText.textContent = 'LOGIN';
+                            if (navigator.vibrate) navigator.vibrate([50, 50, 50]);
+                        });
+                }
+            });
+        });
+    </script>
+</body>
+</html>
