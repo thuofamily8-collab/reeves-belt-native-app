@@ -1,0 +1,29 @@
+{
+  "name": "reeves-belt-native-app",
+  "version": "1.0.0",
+  "description": "REEVES BELT SECURE 360 - Native Guard App (API-driven)",
+  "author": "Lexans Services",
+  "license": "PROPRIETARY",
+  "scripts": {
+    "sync": "cap sync",
+    "open:android": "cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^5.5.0",
+    "@capacitor/app": "^5.0.6",
+    "@capacitor/camera": "^5.0.7",
+    "@capacitor/core": "^5.5.0",
+    "@capacitor/device": "^5.0.6",
+    "@capacitor/geolocation": "^5.0.6",
+    "@capacitor/haptics": "^5.0.6",
+    "@capacitor/network": "^5.0.6",
+    "@capacitor/preferences": "^5.0.6",
+    "@capacitor/splash-screen": "^5.0.6",
+    "@capacitor/status-bar": "^5.0.6",
+    "@capacitor/toast": "^5.0.6"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^5.5.0"
+  }
+}
