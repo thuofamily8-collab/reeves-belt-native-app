@@ -558,3 +558,90 @@ select.field-input {
     color: #8892b0;
     font-size: 12px;
 }
+
+/* ==================== TAB SWITCHER ==================== */
+.tab-switcher {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 5px;
+}
+
+.tab-btn {
+    flex: 1;
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: #8892b0;
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: all 0.2s;
+    font-family: inherit;
+}
+
+.tab-btn.active {
+    background: linear-gradient(135deg, #00c6ff, #0072ff);
+    color: #fff;
+    box-shadow: 0 4px 15px rgba(0, 198, 255, 0.4);
+}
+
+.tab-btn:active {
+    transform: scale(0.98);
+}
+
+/* ==================== TOGGLE SWITCH ==================== */
+.toggle-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    user-select: none;
+    padding: 10px 0;
+}
+
+.toggle-container input {
+    display: none;
+}
+
+.toggle-switch {
+    width: 50px;
+    height: 28px;
+    background: #3a3a4e;
+    border-radius: 14px;
+    position: relative;
+    transition: all 0.3s;
+    flex-shrink: 0;
+}
+
+.toggle-switch::before {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 22px;
+    height: 22px;
+    background: #fff;
+    border-radius: 50%;
+    transition: all 0.3s;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.toggle-container input:checked + .toggle-switch {
+    background: linear-gradient(135deg, #10b981, #059669);
+}
+
+.toggle-container input:checked + .toggle-switch::before {
+    transform: translateX(22px);
+}
+
+.toggle-label {
+    font-size: 14px;
+    color: #e0e0e0;
+    font-weight: 600;
+}
