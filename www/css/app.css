@@ -1,0 +1,629 @@
+/* ============================================================
+   REEVES BELT SECURE 360 - NATIVE APP STYLES
+   Mobile-first, works offline
+   ============================================================ */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+html, body {
+    height: 100%;
+    overflow: hidden;
+}
+
+body {
+    background: radial-gradient(circle at top, #1a1a2e, #0f0f1a);
+    color: #fff;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* ==================== SPLASH PAGE ==================== */
+.splash-page {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 20px;
+}
+
+.splash-container {
+    text-align: center;
+    width: 100%;
+    max-width: 400px;
+}
+
+.splash-logo-wrap {
+    margin-bottom: 20px;
+}
+
+.splash-logo {
+    width: 140px;
+    height: 140px;
+    object-fit: contain;
+    filter: drop-shadow(0 8px 30px rgba(0, 198, 255, 0.6));
+    animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+}
+
+.splash-brand {
+    font-size: 28px;
+    font-weight: 900;
+    letter-spacing: 4px;
+    color: #00c6ff;
+    text-shadow: 0 0 25px rgba(0, 198, 255, 0.6);
+    margin-bottom: 6px;
+}
+
+.splash-brand-sub {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 5px;
+    color: #fff;
+    opacity: 0.9;
+    margin-bottom: 15px;
+}
+
+.splash-tagline {
+    font-size: 11px;
+    color: #00c6ff;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    opacity: 0.75;
+    margin-bottom: 40px;
+}
+
+.splash-loader {
+    width: 40px;
+    height: 40px;
+    border: 3px solid rgba(0, 198, 255, 0.2);
+    border-top-color: #00c6ff;
+    border-radius: 50%;
+    margin: 0 auto;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.splash-status {
+    margin-top: 20px;
+    font-size: 12px;
+    color: #8892b0;
+    letter-spacing: 1px;
+}
+
+/* ==================== LOGIN PAGE ==================== */
+.login-page {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 20px;
+}
+
+.login-container {
+    width: 100%;
+    max-width: 400px;
+    background: linear-gradient(145deg, #1f1f33, #141424);
+    border-radius: 22px;
+    padding: 40px 30px;
+    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.7);
+    border: 1px solid rgba(0, 198, 255, 0.2);
+    position: relative;
+    overflow: hidden;
+}
+
+.login-container::before {
+    content: '';
+    position: absolute;
+    top: -50%; left: -50%;
+    width: 200%; height: 200%;
+    background: radial-gradient(circle, rgba(0, 198, 255, 0.08), transparent 60%);
+    animation: glowMove 8s linear infinite;
+    pointer-events: none;
+    z-index: 0;
+}
+
+@keyframes glowMove {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.login-container > * {
+    position: relative;
+    z-index: 1;
+}
+
+.login-logo {
+    width: 80px;
+    height: 80px;
+    object-fit: contain;
+    display: block;
+    margin: 0 auto 15px;
+    filter: drop-shadow(0 4px 15px rgba(0, 198, 255, 0.5));
+}
+
+.login-brand {
+    text-align: center;
+    margin-bottom: 25px;
+}
+
+.login-brand-main {
+    font-size: 22px;
+    font-weight: 900;
+    letter-spacing: 3px;
+    color: #00c6ff;
+    text-shadow: 0 0 20px rgba(0, 198, 255, 0.5);
+    margin-bottom: 3px;
+}
+
+.login-brand-sub {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    color: #fff;
+    opacity: 0.9;
+}
+
+.login-title {
+    text-align: center;
+    font-size: 16px;
+    color: #e0e0e0;
+    font-weight: 500;
+    letter-spacing: 1px;
+    margin-bottom: 25px;
+}
+
+.input-group {
+    margin-bottom: 16px;
+}
+
+.input-group label {
+    display: block;
+    font-size: 11px;
+    color: #8892b0;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+    font-weight: 600;
+}
+
+.input-group input {
+    width: 100%;
+    padding: 15px 16px;
+    border: 1px solid rgba(0, 198, 255, 0.2);
+    border-radius: 12px;
+    background: #0e0e18;
+    color: #fff;
+    font-size: 16px;
+    outline: none;
+    box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.5);
+    transition: all 0.3s;
+    font-family: inherit;
+}
+
+.input-group input:focus {
+    border-color: #00c6ff;
+    box-shadow: 0 0 14px rgba(0, 198, 255, 0.5);
+}
+
+.input-group input::placeholder {
+    color: #7a7a8c;
+}
+
+.login-btn {
+    width: 100%;
+    padding: 16px;
+    border: none;
+    border-radius: 14px;
+    font-size: 15px;
+    font-weight: 800;
+    color: #fff;
+    cursor: pointer;
+    background: linear-gradient(145deg, #00c6ff, #0072ff);
+    box-shadow: 0 7px 0 #005bb5, 0 14px 25px rgba(0, 0, 0, 0.5);
+    transition: all 0.15s ease;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-top: 10px;
+    position: relative;
+    font-family: inherit;
+}
+
+.login-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 9px 0 #005bb5, 0 18px 30px rgba(0, 0, 0, 0.6);
+}
+
+.login-btn:active {
+    transform: translateY(4px);
+    box-shadow: 0 3px 0 #005bb5;
+}
+
+.login-btn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    transform: translateY(4px);
+    box-shadow: 0 3px 0 #005bb5;
+}
+
+.login-btn .spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    vertical-align: middle;
+    margin-right: 8px;
+}
+
+.error-box {
+    background: rgba(255, 77, 77, 0.15);
+    border: 1px solid rgba(255, 77, 77, 0.3);
+    color: #ff4d4d;
+    padding: 12px 15px;
+    border-radius: 10px;
+    font-size: 13px;
+    margin-bottom: 15px;
+    text-align: center;
+}
+
+.login-footer {
+    text-align: center;
+    margin-top: 25px;
+    font-size: 11px;
+    color: rgba(0, 198, 255, 0.7);
+    letter-spacing: 1px;
+    line-height: 1.6;
+    padding-top: 20px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.login-footer strong {
+    color: #00c6ff;
+}
+
+/* ==================== DASHBOARD PAGE ==================== */
+.dashboard-page {
+    min-height: 100vh;
+    padding: 15px;
+    padding-bottom: 30px;
+}
+
+.app-container {
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.app-header {
+    background: linear-gradient(135deg, #00c6ff, #0072ff);
+    border-radius: 15px;
+    padding: 18px;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    box-shadow: 0 8px 25px rgba(0, 198, 255, 0.3);
+    margin-bottom: 20px;
+}
+
+.app-header-avatar {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.25);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    font-weight: 800;
+    color: #fff;
+    flex-shrink: 0;
+}
+
+.app-header-info {
+    flex: 1;
+    overflow: hidden;
+    min-width: 0;
+}
+
+.app-header-name {
+    font-size: 16px;
+    font-weight: 800;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 3px;
+}
+
+.app-header-role {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.85);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+}
+
+.app-header-tenant {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.95);
+    background: rgba(255, 255, 255, 0.2);
+    padding: 2px 8px;
+    border-radius: 10px;
+    display: inline-block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+.app-header-logout {
+    background: rgba(255, 255, 255, 0.15);
+    border: none;
+    color: #fff;
+    font-size: 22px;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background 0.2s;
+}
+
+.app-header-logout:active {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.app-section-title {
+    font-size: 12px;
+    color: #8892b0;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 12px;
+    padding-left: 5px;
+    font-weight: 700;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.stat-box {
+    background: linear-gradient(145deg, #1f1f33, #141424);
+    border-radius: 14px;
+    padding: 16px 10px;
+    text-align: center;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    border-bottom: 4px solid #00c6ff;
+}
+
+.stat-box.green { border-bottom-color: #10b981; }
+.stat-box.purple { border-bottom-color: #7c3aed; }
+
+.stat-value {
+    font-size: 26px;
+    font-weight: 800;
+    color: #fff;
+    line-height: 1;
+}
+
+.stat-label {
+    font-size: 10px;
+    color: #8892b0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 8px;
+}
+
+.action-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.action-tile {
+    background: linear-gradient(145deg, #1f1f33, #141424);
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    padding: 20px 12px;
+    border-radius: 15px;
+    text-decoration: none;
+    color: #fff;
+    text-align: center;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    transition: all 0.15s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+.action-tile:active {
+    transform: translateY(3px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.action-tile.entry { background: linear-gradient(135deg, #10b981, #059669); border-color: #10b981; }
+.action-tile.exit { background: linear-gradient(135deg, #00c6ff, #0072ff); border-color: #00c6ff; }
+.action-tile.visitor { background: linear-gradient(135deg, #7c3aed, #6d28d9); border-color: #7c3aed; }
+.action-tile.patrol { background: linear-gradient(135deg, #ea580c, #c2410c); border-color: #ea580c; }
+
+.action-icon {
+    font-size: 34px;
+    line-height: 1;
+}
+
+.action-title {
+    font-weight: 800;
+    font-size: 13px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+.action-sub {
+    font-size: 10px;
+    opacity: 0.85;
+}
+
+.notification-list {
+    background: linear-gradient(145deg, #1f1f33, #141424);
+    border-radius: 15px;
+    padding: 15px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    margin-bottom: 20px;
+}
+
+.notification-empty {
+    text-align: center;
+    color: #8892b0;
+    padding: 15px;
+    font-size: 13px;
+}
+
+.notification-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.notification-item:last-child {
+    border-bottom: none;
+}
+
+.notification-item:active {
+    background: rgba(0, 198, 255, 0.1);
+}
+
+.notification-icon {
+    font-size: 26px;
+    flex-shrink: 0;
+}
+
+.notification-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.notification-plate {
+    font-weight: 800;
+    color: #00c6ff;
+    font-family: 'Courier New', monospace;
+    font-size: 15px;
+    margin-bottom: 3px;
+}
+
+.notification-detail {
+    font-size: 11px;
+    color: #8892b0;
+}
+
+.notification-time {
+    font-size: 10px;
+    color: #6b7280;
+    margin-top: 3px;
+}
+
+.notification-arrow {
+    color: #00c6ff;
+    font-size: 22px;
+    flex-shrink: 0;
+}
+
+/* ==================== TOAST NOTIFICATIONS ==================== */
+.toast {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: rgba(17, 34, 64, 0.95);
+    color: #fff;
+    padding: 14px 24px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(0, 198, 255, 0.3);
+    z-index: 99999;
+    transition: transform 0.3s ease, opacity 0.3s;
+    opacity: 0;
+    max-width: 90vw;
+    text-align: center;
+}
+
+.toast.toast-show {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+}
+
+.toast.toast-success { border-color: rgba(16, 185, 129, 0.5); background: rgba(6, 95, 70, 0.95); }
+.toast.toast-error { border-color: rgba(239, 68, 68, 0.5); background: rgba(153, 27, 27, 0.95); }
+.toast.toast-warning { border-color: rgba(245, 158, 11, 0.5); background: rgba(120, 53, 15, 0.95); }
+
+/* ==================== NETWORK STATUS BAR ==================== */
+.network-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    padding: 6px;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    z-index: 99998;
+    transform: translateY(-100%);
+    transition: transform 0.3s;
+}
+
+.network-bar.show {
+    transform: translateY(0);
+}
+
+.network-bar.offline {
+    background: linear-gradient(90deg, #dc2626, #991b1b);
+    color: #fff;
+}
+
+.network-bar.online {
+    background: linear-gradient(90deg, #059669, #047857);
+    color: #fff;
+}
+
+/* ==================== UTILITIES ==================== */
+.hidden { display: none !important; }
+
+.text-center { text-align: center; }
+
+@media (max-width: 380px) {
+    .login-container { padding: 30px 20px; }
+    .app-header { padding: 14px; }
+    .app-header-name { font-size: 14px; }
+    .stat-value { font-size: 22px; }
+    .action-icon { font-size: 28px; }
+    .action-title { font-size: 11px; }
+}
