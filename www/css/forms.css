@@ -1,0 +1,423 @@
+/* ============================================================
+   REEVES BELT - FORM PAGES STYLES
+   ============================================================ */
+
+.form-page {
+    min-height: 100vh;
+    padding: 15px;
+    padding-bottom: 100px;
+}
+
+.form-container {
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.form-header {
+    background: linear-gradient(135deg, #00c6ff, #0072ff);
+    border-radius: 15px;
+    padding: 15px 18px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    box-shadow: 0 8px 25px rgba(0, 198, 255, 0.3);
+    margin-bottom: 20px;
+    position: sticky;
+    top: 10px;
+    z-index: 100;
+}
+
+.back-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: #fff;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    font-size: 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background 0.2s;
+    font-weight: bold;
+}
+
+.back-btn:active {
+    background: rgba(255, 255, 255, 0.35);
+}
+
+.form-header-title {
+    font-size: 18px;
+    font-weight: 800;
+    color: #fff;
+    flex: 1;
+    letter-spacing: 0.5px;
+}
+
+.form-card {
+    background: linear-gradient(145deg, #1f1f33, #141424);
+    border-radius: 15px;
+    padding: 20px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(0, 198, 255, 0.15);
+    margin-bottom: 15px;
+}
+
+.form-card-title {
+    font-size: 13px;
+    color: #00c6ff;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 700;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid rgba(0, 198, 255, 0.2);
+}
+
+.field {
+    margin-bottom: 15px;
+}
+
+.field:last-child {
+    margin-bottom: 0;
+}
+
+.field-label {
+    display: block;
+    font-size: 11px;
+    color: #8892b0;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+    font-weight: 700;
+}
+
+.field-input {
+    width: 100%;
+    padding: 14px 16px;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    background: #0e0e18;
+    color: #fff;
+    font-size: 16px;
+    outline: none;
+    transition: all 0.2s;
+    font-family: inherit;
+    box-sizing: border-box;
+}
+
+.field-input:focus {
+    border-color: #00c6ff;
+    box-shadow: 0 0 12px rgba(0, 198, 255, 0.3);
+}
+
+.field-input::placeholder {
+    color: #7a7a8c;
+}
+
+.field-input[readonly] {
+    background: rgba(0, 198, 255, 0.08);
+    border-color: rgba(0, 198, 255, 0.3);
+    color: #00c6ff;
+    font-weight: 700;
+}
+
+.field-input.error {
+    border-color: #ef4444;
+    animation: shake 0.3s;
+}
+
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-5px); }
+    75% { transform: translateX(5px); }
+}
+
+textarea.field-input {
+    min-height: 80px;
+    resize: vertical;
+}
+
+select.field-input {
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2300c6ff' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 15px center;
+    padding-right: 40px;
+}
+
+.field-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+@media (max-width: 500px) {
+    .field-row { grid-template-columns: 1fr; }
+}
+
+.camera-preview {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 4/3;
+    background: #000;
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid rgba(0, 198, 255, 0.3);
+}
+
+.camera-preview video,
+.camera-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.camera-placeholder {
+    text-align: center;
+    color: #6b7280;
+    font-size: 13px;
+}
+
+.camera-placeholder .icon {
+    font-size: 48px;
+    display: block;
+    margin-bottom: 10px;
+}
+
+.camera-timestamp {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: rgba(0, 0, 0, 0.75);
+    color: #00ff00;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    font-weight: bold;
+    padding: 5px 10px;
+    border-radius: 6px;
+    border: 2px solid #00ff00;
+    z-index: 5;
+    line-height: 1.3;
+}
+
+.camera-timestamp .time {
+    font-size: 14px;
+    font-weight: bold;
+}
+
+.camera-btns {
+    display: flex;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.cam-btn {
+    flex: 1;
+    padding: 12px;
+    border: none;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 800;
+    color: #fff;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: all 0.15s;
+    font-family: inherit;
+}
+
+.cam-btn.start {
+    background: linear-gradient(135deg, #10b981, #059669);
+    box-shadow: 0 4px 0 #047857;
+}
+
+.cam-btn.capture {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    box-shadow: 0 4px 0 #b91c1c;
+}
+
+.cam-btn:active {
+    transform: translateY(3px);
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.3);
+}
+
+.cam-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: translateY(3px);
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.3);
+}
+
+.form-actions {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 15px;
+    background: linear-gradient(180deg, transparent, #0f0f1a 20%);
+    display: flex;
+    gap: 10px;
+    z-index: 200;
+    padding-bottom: calc(15px + env(safe-area-inset-bottom));
+}
+
+.action-btn {
+    flex: 1;
+    padding: 16px;
+    border: none;
+    border-radius: 14px;
+    font-size: 15px;
+    font-weight: 900;
+    color: #fff;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    transition: all 0.15s;
+    font-family: inherit;
+}
+
+.action-btn.green {
+    background: linear-gradient(145deg, #10b981, #059669);
+    box-shadow: 0 6px 0 #047857, 0 12px 25px rgba(0, 0, 0, 0.4);
+}
+
+.action-btn.red {
+    background: linear-gradient(145deg, #ef4444, #dc2626);
+    box-shadow: 0 6px 0 #b91c1c, 0 12px 25px rgba(0, 0, 0, 0.4);
+}
+
+.action-btn.blue {
+    background: linear-gradient(145deg, #00c6ff, #0072ff);
+    box-shadow: 0 6px 0 #005bb5, 0 12px 25px rgba(0, 0, 0, 0.4);
+}
+
+.action-btn:active {
+    transform: translateY(4px);
+    box-shadow: 0 2px 0 rgba(0, 0, 0, 0.4);
+}
+
+.action-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: translateY(4px);
+    box-shadow: 0 2px 0 rgba(0, 0, 0, 0.4);
+}
+
+.info-banner {
+    background: rgba(0, 198, 255, 0.1);
+    border-left: 4px solid #00c6ff;
+    padding: 12px 15px;
+    border-radius: 10px;
+    margin-bottom: 15px;
+    font-size: 13px;
+    color: #b0d4f0;
+    line-height: 1.5;
+}
+
+.info-banner.green {
+    background: rgba(16, 185, 129, 0.1);
+    border-left-color: #10b981;
+    color: #a7f3d0;
+}
+
+.info-banner.warning {
+    background: rgba(245, 158, 11, 0.1);
+    border-left-color: #f59e0b;
+    color: #fde68a;
+}
+
+.info-banner.error {
+    background: rgba(239, 68, 68, 0.1);
+    border-left-color: #ef4444;
+    color: #fecaca;
+}
+
+.info-banner strong {
+    color: #fff;
+}
+
+.loading-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(10, 25, 47, 0.9);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 15px;
+    z-index: 9999;
+}
+
+.loading-overlay.show {
+    display: flex;
+}
+
+.loading-spinner {
+    width: 50px;
+    height: 50px;
+    border: 4px solid rgba(0, 198, 255, 0.2);
+    border-top-color: #00c6ff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.loading-text {
+    color: #00c6ff;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+
+.vehicle-info-card {
+    background: linear-gradient(145deg, #1f1f33, #141424);
+    border-radius: 15px;
+    padding: 18px;
+    margin-bottom: 12px;
+    border-left: 4px solid #00c6ff;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
+.vehicle-info-plate {
+    font-size: 22px;
+    font-weight: 900;
+    color: #00c6ff;
+    font-family: 'Courier New', monospace;
+    letter-spacing: 2px;
+    margin-bottom: 5px;
+}
+
+.vehicle-info-detail {
+    font-size: 13px;
+    color: #8892b0;
+    margin-bottom: 3px;
+}
+
+.vehicle-info-weight {
+    font-size: 15px;
+    color: #10b981;
+    font-weight: 700;
+    margin-top: 8px;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: #8892b0;
+}
+
+.empty-state-icon {
+    font-size: 60px;
+    margin-bottom: 15px;
+    opacity: 0.5;
+}
