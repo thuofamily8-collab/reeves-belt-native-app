@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#0a192f">
+    <title>Visitor Check-in - Reeves Belt Guard</title>
+    <link rel="stylesheet" href="css/app.css">
+    <link rel="stylesheet" href="css/forms.css">
+</head>
+<body class="form-page">
+
+    <div class="form-container">
+
+        <div class="form-header">
+            <button class="back-btn" onclick="window.location.href='dashboard.html'">←</button>
+            <div class="form-header-title">👥 Visitor Check-in</div>
+        </div>
+
+        <!-- Tab Switcher -->
+        <div class="tab-switcher">
+            <button class="tab-btn active" id="tabCheckIn" onclick="switchTab('checkin')">➕ Check-In</button>
+            <button class="tab-btn" id="tabCheckOut" onclick="switchTab('checkout')">🚪 Check-Out</button>
+        </div>
+
+        <!-- CHECK-IN VIEW -->
+        <div id="checkinView">
+            <form id="visitorForm">
+
+                <div class="form-card">
+                    <div class="form-card-title">📸 Visitor Photo</div>
+                    <div class="camera-preview" id="cameraPreview">
+                        <video id="cameraVideo" autoplay playsinline muted style="display:none;"></video>
+                        <img id="cameraImage" style="display:none;" alt="Captured">
+                        <div class="camera-placeholder" id="cameraPlaceholder">
+                            <span class="icon">👤</span>
+                            <p>Tap "Start Camera" to capture</p>
+                        </div>
+                        <div class="camera-timestamp" id="timestampOverlay" style="display:none;">
+                            <div>● LIVE</div>
+                            <div class="time" id="timeDisplay">--:--:--</div>
+                        </div>
+                    </div>
+                    <div class="camera-btns">
+                        <button type="button" class="cam-btn start" onclick="startCamera()" id="startCamBtn">📷 Start Camera</button>
+                        <button type="button" class="cam-btn capture" onclick="capturePhoto()" id="captureBtn" disabled>📸 Capture</button>
+                    </div>
+                </div>
+
+                <div class="form-card">
+                    <div class="form-card-title">👤 Visitor Details</div>
+
+                    <div class="field">
+                        <label class="field-label">Visitor Name *</label>
+                        <input type="text" id="visitorName" class="field-input" placeholder="Full name" required>
+                    </div>
+
+                    <div class="field-row">
+                        <div class="field">
+                            <label class="field-label">ID Number *</label>
+                            <input type="text" id="visitorId" class="field-input" placeholder="National ID" required>
+                        </div>
+
+                        <div class="field">
+                            <label class="field-label">Phone *</label>
+                            <input type="tel" id="visitorPhone" class="field-input" placeholder="0712345678" required>
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <label class="field-label">Company / Organisation</label>
+                        <input type="text" id="visitorCompany" class="field-input" placeholder="e.g., ABC Ltd">
+                    </div>
+
+                </div>
+
+                <div class="form-card">
+                    <div class="form-card-title">📋 Visit Details</div>
+
+                    <div class="field">
+                        <label class="field-label">Host / Person Visiting *</label>
+                        <input type="text" id="hostName" class="field-input" placeholder="e.g., HR Manager" required>
+                    </div>
+
+                    <div class="field">
+                        <label class="field-label">Purpose of Visit *</label>
+                        <select id="visitorPurpose" class="field-input" required>
+                            <option value="">Select purpose...</option>
+                            <option value="Interview">Interview</option>
+                            <option value="Audit Meeting">Audit Meeting</option>
+                            <option value="Supplier Visit">Supplier Visit</option>
+                            <option value="Contractor">Contractor</option>
+                            <option value="Customer">Customer</option>
+                            <option value="Delivery">Delivery</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+
+                </div>
+
+                <!-- Arrived with vehicle toggle -->
+                <div class="form-card">
+                    <div class="form-card-title">🚗 Vehicle (Optional)</div>
+
+                    <label class="toggle-container">
+                        <input type="checkbox" id="arrivedWithVehicle" onchange="toggleVehicleFields()">
+                        <span class="toggle-switch"></span>
+                        <span class="toggle-label">Visitor arrived with a vehicle?</span>
+                    </label>
+
+                    <div id="vehicleFields" style="display:none; margin-top: 15px;">
+                        <div class="field">
+                            <label class="field-label">Vehicle Plate</label>
+                            <input type="text" id="visitorVehiclePlate" class="field-input" placeholder="e.g., KDB 555Z" autocapitalize="characters">
+                        </div>
+
+                        <div class="field-row">
+                            <div class="field">
+                                <label class="field-label">Vehicle Type</label>
+                                <select id="visitorVehicleType" class="field-input">
+                                    <option value="Car">Car</option>
+                                    <option value="SUV">SUV</option>
+                                    <option value="Pickup">Pickup</option>
+                                    <option value="Van">Van</option>
+                                    <option value="Motorcycle">Motorcycle</option>
+                                </select>
+                            </div>
+
+                            <div class="field">
+                                <label class="field-label">Vehicle Model</label>
+                                <input type="text" id="visitorVehicleModel" class="field-input" placeholder="e.g., Toyota Prado">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="info-banner green">
+                    <strong>✓ Offline Mode:</strong> If internet is down, data will be saved locally and synced automatically when connection returns.
+                </div>
+
+            </form>
+        </div>
+
+        <!-- CHECK-OUT VIEW -->
+        <div id="checkoutView" style="display: none;">
+            <div class="info-banner">
+                <strong>ℹ️ Select a visitor</strong> to check them out.
+            </div>
+
+            <div id="visitorsList">
+                <div class="empty-state">
+                    <div class="empty-state-icon">👥</div>
+                    <p>Loading visitors...</p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Fixed Bottom Actions (only for check-in view) -->
+    <div class="form-actions" id="checkinActions">
+        <button type="button" class="action-btn green" onclick="submitVisitor()" id="submitBtn">
+            ✓ CHECK-IN
+        </button>
+        <button type="button" class="action-btn red" onclick="voidVisitor()">
+            ✕ VOID
+        </button>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text" id="loadingText">Processing...</div>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/offline.js"></script>
+    <script src="js/visitor.js"></script>
+</body>
+</html>
