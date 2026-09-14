@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#0a192f">
+    <title>Patrol Scan - Reeves Belt Guard</title>
+    <link rel="stylesheet" href="css/app.css">
+    <link rel="stylesheet" href="css/forms.css">
+</head>
+<body class="form-page">
+
+    <div class="form-container">
+
+        <div class="form-header">
+            <button class="back-btn" onclick="window.location.href='dashboard.html'">←</button>
+            <div class="form-header-title">📍 Patrol Scan</div>
+        </div>
+
+        <div class="info-banner">
+            <strong>ℹ️ Scan the QR code</strong> at each checkpoint to record your patrol round.
+        </div>
+
+        <!-- Scanner Area -->
+        <div class="form-card">
+            <div class="form-card-title">📷 QR Scanner</div>
+
+            <div class="scanner-preview" id="scannerPreview">
+                <video id="qrVideo" autoplay playsinline muted style="display:none;"></video>
+                <img id="qrImage" style="display:none;" alt="Scanned">
+                <div class="scanner-placeholder" id="scannerPlaceholder">
+                    <span class="icon">📱</span>
+                    <p>Tap "Start Scanner" to scan</p>
+                </div>
+                <div class="scanner-frame" id="scannerFrame" style="display:none;">
+                    <div class="scanner-corner top-left"></div>
+                    <div class="scanner-corner top-right"></div>
+                    <div class="scanner-corner bottom-left"></div>
+                    <div class="scanner-corner bottom-right"></div>
+                    <div class="scanner-line"></div>
+                </div>
+            </div>
+
+            <div class="camera-btns">
+                <button type="button" class="cam-btn start" onclick="startScanner()" id="startScanBtn">📱 Start Scanner</button>
+                <button type="button" class="cam-btn capture" onclick="stopScanner()" id="stopScanBtn" disabled>⏹ Stop</button>
+            </div>
+
+            <div id="scanResult" style="display:none; margin-top: 15px;">
+                <div class="scan-success" id="scanSuccess">
+                    <div class="scan-success-icon">✅</div>
+                    <div class="scan-success-text" id="scanSuccessText">Checkpoint detected!</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Progress -->
+        <div class="form-card">
+            <div class="form-card-title">📊 Today's Progress</div>
+
+            <div class="progress-container">
+                <div class="progress-circle">
+                    <span class="progress-value" id="progressPercent">0%</span>
+                </div>
+                <div class="progress-stats">
+                    <div class="progress-stat">
+                        <div class="progress-stat-value" id="scannedCount">0</div>
+                        <div class="progress-stat-label">Scanned</div>
+                    </div>
+                    <div class="progress-stat">
+                        <div class="progress-stat-value" id="totalCount">0</div>
+                        <div class="progress-stat-label">Total</div>
+                    </div>
+                    <div class="progress-stat">
+                        <div class="progress-stat-value" id="remainingCount">0</div>
+                        <div class="progress-stat-label">Remaining</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Checkpoints List -->
+        <div class="form-card">
+            <div class="form-card-title">🗺️ Checkpoints</div>
+            <div id="checkpointsList">
+                <div class="empty-state" style="padding: 20px;">
+                    <p>Loading checkpoints...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Manual Selection (Fallback) -->
+        <div class="form-card">
+            <div class="form-card-title">🖐️ Manual Selection (Fallback)</div>
+            <div class="field">
+                <label class="field-label">Select Checkpoint</label>
+                <select id="manualCheckpoint" class="field-input">
+                    <option value="">-- Select Checkpoint --</option>
+                </select>
+            </div>
+            <button type="button" class="action-btn blue" onclick="submitManualScan()" style="width: 100%; margin-top: 10px;">
+                ✓ LOG CHECKPOINT
+            </button>
+        </div>
+
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text" id="loadingText">Processing...</div>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/offline.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <script src="js/patrol.js"></script>
+</body>
+</html>
