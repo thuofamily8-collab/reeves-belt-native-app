@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#0a192f">
+    <title>Reeves Belt Guard</title>
+    <link rel="stylesheet" href="css/app.css">
+</head>
+<body class="splash-page">
+    <div class="splash-container">
+        <div class="splash-logo-wrap">
+            <img src="assets/logo.png" alt="Reeves Belt" class="splash-logo" onerror="this.style.display='none'">
+        </div>
+        <div class="splash-brand">REEVES BELT</div>
+        <div class="splash-brand-sub">SECURE 360</div>
+        <div class="splash-tagline">Guard Mobile App</div>
+        <div class="splash-loader"></div>
+        <div class="splash-status" id="splashStatus">Starting up...</div>
+    </div>
+
+    <script src="js/auth.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            var status = document.getElementById('splashStatus');
+            
+            // Wait 1.5 seconds then check auth
+            setTimeout(function() {
+                status.textContent = 'Checking login...';
+                
+                // Check if user is already logged in
+                if (typeof RBAuth !== 'undefined' && RBAuth.isLoggedIn()) {
+                    status.textContent = 'Welcome back!';
+                    setTimeout(function() {
+                        window.location.href = 'dashboard.html';
+                    }, 300);
+                } else {
+                    status.textContent = 'Loading login...';
+                    setTimeout(function() {
+                        window.location.href = 'login.html';
+                    }, 300);
+                }
+            }, 1500);
+        });
+    </script>
+</body>
+</html>
