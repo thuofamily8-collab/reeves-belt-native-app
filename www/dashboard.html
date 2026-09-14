@@ -45,25 +45,25 @@
         <div class="app-section-title">Quick Actions</div>
         <div class="action-grid">
 
-            <a href="#" class="action-tile entry" onclick="comingSoon('Vehicle Entry'); return false;">
+            <a href="vehicle-entry.html" class="action-tile entry">
                 <div class="action-icon">🚛</div>
                 <div class="action-title">Vehicle Entry</div>
                 <div class="action-sub">Log incoming</div>
             </a>
 
-            <a href="#" class="action-tile exit" onclick="comingSoon('Vehicle Exit'); return false;">
+            <a href="vehicle-exit.html" class="action-tile exit">
                 <div class="action-icon">🚪</div>
                 <div class="action-title">Vehicle Exit</div>
                 <div class="action-sub">Process exit</div>
             </a>
 
-            <a href="#" class="action-tile visitor" onclick="comingSoon('Visitor Check-in'); return false;">
+            <a href="visitor-checkin.html" class="action-tile visitor">
                 <div class="action-icon">👥</div>
                 <div class="action-title">Visitors</div>
                 <div class="action-sub">Check-in / out</div>
             </a>
 
-            <a href="#" class="action-tile patrol" onclick="comingSoon('Patrol Scan'); return false;">
+            <a href="patrol-scan.html" class="action-tile patrol">
                 <div class="action-icon">📍</div>
                 <div class="action-title">Patrol Scan</div>
                 <div class="action-sub">QR checkpoint</div>
@@ -86,7 +86,6 @@
         document.addEventListener('DOMContentLoaded', function() {
             if (!RBAuth.requireLogin()) return;
 
-            // Load user info
             var user = RBAuth.getCurrentUser();
             if (user) {
                 document.getElementById('userName').textContent = user.full_name || 'Guard';
@@ -95,11 +94,9 @@
             }
             document.getElementById('userTenant').textContent = '🏢 ' + RBAuth.getTenantName();
 
-            // Load dashboard data
             RBApp.loadDashboardStats();
             RBApp.loadPendingDetections();
 
-            // Auto-refresh every 30 seconds
             setInterval(function() {
                 if (!document.hidden) {
                     RBApp.loadDashboardStats();
@@ -107,7 +104,6 @@
                 }
             }, 30000);
 
-            // Network status monitoring
             RBApp.startNetworkMonitor();
         });
     </script>
