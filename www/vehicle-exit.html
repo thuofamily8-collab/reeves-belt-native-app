@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#0a192f">
+    <title>Vehicle Exit - Reeves Belt Guard</title>
+    <link rel="stylesheet" href="css/app.css">
+    <link rel="stylesheet" href="css/forms.css">
+</head>
+<body class="form-page">
+
+    <div class="form-container">
+
+        <div class="form-header">
+            <button class="back-btn" onclick="window.location.href='dashboard.html'">←</button>
+            <div class="form-header-title">🚪 Vehicle Exit</div>
+        </div>
+
+        <div class="info-banner">
+            <strong>ℹ️ Select a vehicle</strong> from the list below to process its exit.
+        </div>
+
+        <div id="vehiclesList">
+            <div class="empty-state">
+                <div class="empty-state-icon">🚛</div>
+                <p>Loading vehicles...</p>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Exit Modal -->
+    <div id="exitModal" class="modal-overlay">
+        <div class="modal-content">
+
+            <div class="modal-header">
+                <div class="modal-title">🔄 Process Exit</div>
+                <button class="modal-close" onclick="closeExitModal()">×</button>
+            </div>
+
+            <div class="modal-body">
+
+                <div class="vehicle-info-card">
+                    <div class="vehicle-info-plate" id="modalPlate">KCA 123D</div>
+                    <div class="vehicle-info-detail" id="modalDriver">—</div>
+                    <div class="vehicle-info-detail" id="modalPurpose">—</div>
+                </div>
+
+                <div class="field">
+                    <label class="field-label">Entry Weight (KG)</label>
+                    <input type="text" id="modalEntryWeight" class="field-input" readonly>
+                </div>
+
+                <div class="field">
+                    <label class="field-label">Exit Weight (KG) *</label>
+                    <input type="number" id="modalExitWeight" class="field-input" placeholder="Enter exit weight" step="0.01">
+                </div>
+
+                <div class="weight-comparison" id="weightComparison">
+                    <div class="comparison-placeholder">Enter exit weight to compare</div>
+                </div>
+
+                <div class="field">
+                    <label class="field-label">Notes (Optional)</label>
+                    <textarea id="modalNotes" class="field-input" placeholder="Any observations..."></textarea>
+                </div>
+
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="action-btn green" onclick="submitExit(false)" id="exitAuthorizeBtn">
+                    ✓ AUTHORIZE EXIT
+                </button>
+                <button type="button" class="action-btn red" onclick="submitExit(true)" id="exitFlagBtn">
+                    ⚠ FLAG
+                </button>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text" id="loadingText">Processing...</div>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/offline.js"></script>
+    <script src="js/vehicle-exit.js"></script>
+</body>
+</html>
