@@ -88,7 +88,11 @@ var RBApi = (function() {
 
             var token = getToken();
             if (token) {
+                // Send BOTH headers:
+                //  - Authorization:  standard Bearer (works if proxy permits)
+                //  - X-Auth-Token:   raw token (survives proxy stripping on shared hosts)
                 xhr.setRequestHeader('Authorization', 'Bearer ' + token);
+                xhr.setRequestHeader('X-Auth-Token', token);
             }
 
             xhr.timeout = 15000;
