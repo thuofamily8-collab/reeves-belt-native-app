@@ -3,6 +3,9 @@
  * REEVES BELT SECURE 360 - API CLIENT
  * Handles all communication with the server
  * Supports offline mode with request queueing
+ *
+ * UPDATED: Sends both Authorization and X-Auth-Token headers
+ *          to survive proxy stripping on shared hosting.
  * ============================================================
  */
 
