@@ -1,6 +1,6 @@
 {
-  "appId": "co.ke.reevesbelt.guard",
-  "appName": "Reeves Belt Guard",
+  "appId": "co.ke.reevesbelt.app",
+  "appName": "Reeves Belt App",
   "webDir": "www",
   "bundledWebRuntime": false,
   "server": {
@@ -15,16 +15,20 @@
   },
   "plugins": {
     "SplashScreen": {
-      "launchShowDuration": 1500,
-      "backgroundColor": "#0a192f",
-      "showSpinner": false
+      "launchShowDuration": 2000,
+      "backgroundColor": "#0a0e1a",
+      "showSpinner": false,
+      "androidScaleType": "CENTER_CROP"
     },
     "StatusBar": {
       "style": "dark",
-      "backgroundColor": "#00c6ff"
+      "backgroundColor": "#0a0e1a"
     },
     "Camera": {
       "permissions": ["camera", "photos"]
+    },
+    "Geolocation": {
+      "permissions": ["location"]
     }
   }
 }
