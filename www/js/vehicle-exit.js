@@ -171,4 +171,148 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if (!currentVehicle) return;
 
-        if (
+        if (isNaN(exitWeight) || exitWeight <= 0) {
+            resetComparison();
+            return;
+        }
+
+        var net = exitWeight - entryWeight;
+        var el = document.getElementById('weightComparison');
+        var purpose = currentVehicle.purpose || '';
+
+        var alert = false;
+        var message = '';
+
+        if (purpose === 'Deliver Raw Maize' || purpose === 'Deliver Raw Wheat') {
+            if (net < 0) {
+                alert = true;
+                message = 'Weight LOSS detected — expected gain';
+            } else {
+                message = 'Net material delivered';
+            }
+        } else if (purpose === 'Pick Up Finished Goods') {
+            if (net < 0) {
+                alert = true;
+                message = 'Weight LOSS detected — expected gain';
+            } else {
+                message = 'Net goods dispatched';
+            }
+        } else {
+            message = 'Weight difference recorded';
+            if (Math.abs(net) > 1000) {
+                alert = true;
+                message = 'Large weight change detected';
+            }
+        }
+
+        if (alert) {
+            el.className = 'weight-comparison alert';
+            el.innerHTML =
+                '<div class="comparison-alert">⚠️ Net: ' +
+                (net >= 0 ? '+' : '') + formatNumber(net) + ' KG</div>' +
+                '<div class="comparison-message">' + message + '</div>';
+        } else {
+            el.className = 'weight-comparison success';
+            el.innerHTML =
+                '<div class="comparison-success">✓ Net: ' +
+                (net >= 0 ? '+' : '') + formatNumber(net) + ' KG</div>' +
+                '<div class="comparison-message">' + message + '</div>';
+        }
+    });
+});
+
+// ============================================================
+// SUBMIT EXIT
+// ============================================================
+function submitExit(shouldFlag) {
+    if (!currentVehicle) {
+        showToast('No vehicle selected', 'error');
+        return;
+    }
+
+    var exitWeight = parseFloat(document.getElementById('modalExitWeight').value);
+    var notes = document.getElementById('modalNotes').value.trim();
+    var exitCommentEl = document.getElementById('modalExitComment');
+    var exitComment = exitCommentEl ? exitCommentEl.value.trim() : '';
+
+    if (!exitWeight || exitWeight <= 0) {
+        showToast('Enter valid exit weight', 'error');
+        return;
+    }
+
+    if (shouldFlag && !notes) {
+        showToast('Please add notes before flagging', 'error');
+        return;
+    }
+
+    var confirmMsg = shouldFlag
+        ? 'Flag this vehicle for inspection?'
+        : 'Authorize this exit?';
+
+    if (!confirm(confirmMsg)) return;
+
+    showLoading(shouldFlag ? 'Flagging vehicle...' : 'Recording exit...');
+
+    var exitData = {
+        log_id: currentVehicle.id,
+        exit_weight: exitWeight,
+        exit_comment: exitComment,
+        notes: notes,
+        action: shouldFlag ? 'flag' : 'authorize',
+        sync_hash: 'exit-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9)
+    };
+
+    OfflineSync.queueRecord('vehicle_exit', exitData);
+
+    OfflineSync.syncNow().then(function(result) {
+        hideLoading();
+
+        if (result.synced > 0) {
+            showToast(shouldFlag ? '⚠️ Vehicle flagged' : '✅ Exit authorized', shouldFlag ? 'warning' : 'success');
+        } else {
+            showToast('💾 Saved locally - will sync when online', 'warning');
+        }
+
+        if (navigator.vibrate) navigator.vibrate(shouldFlag ? [100, 50, 100] : 200);
+
+        closeExitModal();
+
+        setTimeout(function() {
+            loadVehiclesInside();
+        }, 800);
+    });
+}
+
+// ============================================================
+// HELPERS
+// ============================================================
+function showLoading(text) {
+    document.getElementById('loadingText').textContent = text;
+    document.getElementById('loadingOverlay').classList.add('show');
+}
+
+function hideLoading() {
+    document.getElementById('loadingOverlay').classList.remove('show');
+}
+
+function showToast(message, type) {
+    if (typeof RBApp !== 'undefined' && RBApp.showToast) {
+        RBApp.showToast(message, type);
+    } else {
+        alert(message);
+    }
+}
+
+// ============================================================
+// INIT
+// ============================================================
+document.addEventListener('DOMContentLoaded', function() {
+    if (!RBAuth.requireLogin()) return;
+    loadVehiclesInside();
+
+    setInterval(function() {
+        if (!document.hidden && !document.getElementById('exitModal').classList.contains('active')) {
+            loadVehiclesInside();
+        }
+    }, 30000);
+});
