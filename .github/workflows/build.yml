@@ -53,7 +53,7 @@ jobs:
         run: npm install
 
       # ------------------------------------------------------------
-      # 6. Add Android platform
+      # 6. Add Android platform (generates android/ folder)
       # ------------------------------------------------------------
       - name: Add Android platform
         run: |
@@ -62,8 +62,18 @@ jobs:
           fi
 
       # ------------------------------------------------------------
-      # 7. Patch AndroidManifest.xml with required permissions
-      #    (camera, location, foreground service, boot receiver)
+      # 7. Generate Android icons + splash screens from resources/
+      # ------------------------------------------------------------
+      - name: Generate Android assets
+        run: |
+          npx @capacitor/assets generate \
+            --android \
+            --iconBackgroundColor '#0a0e1a' \
+            --splashBackgroundColor '#0a0e1a'
+        continue-on-error: true
+
+      # ------------------------------------------------------------
+      # 8. Patch AndroidManifest.xml with required permissions
       # ------------------------------------------------------------
       - name: Patch AndroidManifest permissions
         run: |
@@ -87,48 +97,48 @@ jobs:
           cat "$MANIFEST"
 
       # ------------------------------------------------------------
-      # 8. Capacitor sync
+      # 9. Capacitor sync (copy www/ + config into android/)
       # ------------------------------------------------------------
       - name: Capacitor sync
         run: npx cap sync android
 
       # ------------------------------------------------------------
-      # 9. Make gradlew executable
+      # 10. Make gradlew executable
       # ------------------------------------------------------------
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
       # ------------------------------------------------------------
-      # 10. Build Debug APK
+      # 11. Build Debug APK
       # ------------------------------------------------------------
       - name: Build Debug APK
         working-directory: android
         run: ./gradlew assembleDebug --stacktrace
 
       # ------------------------------------------------------------
-      # 11. Prepare artifact
+      # 12. Prepare artifact
       # ------------------------------------------------------------
       - name: Prepare APK artifact
         run: |
           mkdir -p artifacts
           TIMESTAMP=$(date +'%Y%m%d-%H%M%S')
           cp android/app/build/outputs/apk/debug/app-debug.apk \
-             artifacts/reeves-belt-secure360-debug-${TIMESTAMP}.apk
+             artifacts/reeves-belt-app-debug-${TIMESTAMP}.apk
           ls -la artifacts/
 
       # ------------------------------------------------------------
-      # 12. Upload APK
+      # 13. Upload APK
       # ------------------------------------------------------------
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: reeves-belt-secure360-debug-apk
+          name: reeves-belt-app-debug-apk
           path: artifacts/*.apk
           retention-days: 30
           if-no-files-found: error
 
       # ------------------------------------------------------------
-      # 13. Attach to release if tagged
+      # 14. Attach to release if tagged
       # ------------------------------------------------------------
       - name: Attach APK to GitHub Release
         if: github.event_name == 'release'
