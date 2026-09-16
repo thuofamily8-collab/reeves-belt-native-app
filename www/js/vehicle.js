@@ -183,6 +183,7 @@ function submitEntry() {
     var driverPhone = document.getElementById('driverPhone').value.trim();
     var purpose = document.getElementById('purpose').value;
     var entryWeight = parseFloat(document.getElementById('entryWeight').value);
+    var entryComment = document.getElementById('entryComment') ? document.getElementById('entryComment').value.trim() : '';
 
     if (!plate) { showToast('Enter plate number', 'error'); return; }
     if (!vehicleType) { showToast('Select vehicle type', 'error'); return; }
@@ -204,6 +205,7 @@ function submitEntry() {
         driver_phone: driverPhone,
         purpose: purpose,
         entry_weight_kg: entryWeight,
+        entry_comment: entryComment,
         vehicle_photo_data: capturedPhotoData,
         photo_captured_at: capturedTimestamp,
         sync_hash: generateSyncHash()
