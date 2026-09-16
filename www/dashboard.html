@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="theme-color" content="#0a192f">
-    <title>Dashboard - Reeves Belt Guard</title>
+    <title>Dashboard - Reeves Belt App</title>
     <link rel="stylesheet" href="css/app.css">
 </head>
 <body class="dashboard-page">
@@ -81,6 +81,12 @@
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             if (!RBAuth.requireLogin()) return;
+
+            // Phase 2: Redirect supervisors to their dedicated dashboard
+            if (RBAuth.isSupervisor()) {
+                window.location.href = 'supervisor.html';
+                return;
+            }
 
             var user = RBAuth.getCurrentUser();
             if (user) {
