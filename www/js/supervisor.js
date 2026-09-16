@@ -11,7 +11,7 @@ var RBSupervisor = (function() {
     var SHIFT_START_KEY = 'rb_shift_started';
     var SHIFT_TENANT_KEY = 'rb_shift_tenant_id';
     var SUPER_TENANT_KEY = 'rb_supervisor_tenant_id';
-    var EXIT_PIN = '2244'; // Phase 2 hardcoded — move to DB in Phase 3
+    var EXIT_PIN = '2244';
 
     var gpsInterval = null;
     var timerInterval = null;
@@ -48,7 +48,6 @@ var RBSupervisor = (function() {
         var user = RBAuth.getCurrentUser();
         if (!user) { window.location.href = 'login.html'; return; }
 
-        // If not a supervisor, bounce to guard dashboard
         if (user.role !== 'supervisor') {
             window.location.href = 'dashboard.html';
             return;
@@ -57,21 +56,14 @@ var RBSupervisor = (function() {
         document.getElementById('supGreeting').textContent =
             'Welcome back, ' + (user.full_name || 'Supervisor');
 
-        // Load tenants from server and populate switcher
         loadSupervisorTenants();
-
-        // Render shift button state
         updateShiftButton();
 
-        // Set timer to refresh every 30 seconds
         setInterval(loadDashboardData, 30000);
-
-        // Initial load
         setTimeout(loadDashboardData, 500);
     }
 
     function loadSupervisorTenants() {
-        // Fetch guards + tenant info from the API
         RBApi.getSupervisorDashboard().then(function(res) {
             var tenants = (res && res.tenants) ? res.tenants : [];
             localStorage.setItem('rb_supervisor_tenants', JSON.stringify(tenants));
@@ -197,20 +189,42 @@ var RBSupervisor = (function() {
     }
 
     function toggleShift() {
-        if (isShiftActive()) {
-            window.location.href = 'supervisor-shift.html';
-        } else {
-            startShift();
+        console.log('[Supervisor] toggleShift tapped. Active:', isShiftActive());
+        try {
+            if (isShiftActive()) {
+                window.location.href = 'supervisor-shift.html';
+            } else {
+                startShift();
+            }
+        } catch (e) {
+            console.error('[Supervisor] toggleShift error:', e);
+            alert('Error: ' + e.message);
         }
     }
 
     function startShift() {
-        if (!RBPermissions || typeof RBPermissions.requestLocation !== 'function') {
-            alert('Permission helper not loaded');
-            return;
+        // Fallback chain for permission
+        var permissionPromise;
+
+        if (typeof RBPermissions !== 'undefined' && typeof RBPermissions.requestLocation === 'function') {
+            console.log('[Supervisor] Using RBPermissions helper');
+            permissionPromise = RBPermissions.requestLocation();
+        } else {
+            console.log('[Supervisor] RBPermissions not loaded — falling back to navigator.geolocation');
+            permissionPromise = new Promise(function(resolve) {
+                if (!navigator.geolocation) {
+                    resolve(false);
+                    return;
+                }
+                navigator.geolocation.getCurrentPosition(
+                    function() { resolve(true); },
+                    function() { resolve(false); },
+                    { enableHighAccuracy: true, timeout: 10000 }
+                );
+            });
         }
 
-        RBPermissions.requestLocation().then(function(granted) {
+        permissionPromise.then(function(granted) {
             if (!granted) {
                 alert('GPS permission required to start a shift. Enable location access in phone settings.');
                 return;
@@ -221,7 +235,6 @@ var RBSupervisor = (function() {
             localStorage.setItem(SHIFT_START_KEY, String(now));
             localStorage.setItem(SHIFT_TENANT_KEY, getCurrentTenantId());
 
-            // Notify server
             RBApi.startSupervisorShift().catch(function(err) {
                 console.log('Server shift-start log failed:', err);
             });
@@ -229,6 +242,9 @@ var RBSupervisor = (function() {
             if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
 
             window.location.href = 'supervisor-shift.html';
+        }).catch(function(err) {
+            console.error('[Supervisor] Permission error:', err);
+            alert('Could not start shift: ' + err.message);
         });
     }
 
@@ -243,7 +259,6 @@ var RBSupervisor = (function() {
             return;
         }
 
-        // Populate tenant name
         var tenants = getSupervisorTenants();
         var activeTenantId = localStorage.getItem(SHIFT_TENANT_KEY) || getCurrentTenantId();
         var tenantName = 'Unknown';
@@ -253,13 +268,8 @@ var RBSupervisor = (function() {
         var el = document.getElementById('shiftTenant');
         if (el) el.textContent = tenantName;
 
-        // Start timer
         startTimer();
-
-        // Start GPS pings
         startGPSPings();
-
-        // Start battery monitor
         startBatteryMonitor();
     }
 
@@ -285,10 +295,7 @@ var RBSupervisor = (function() {
     function pad(n) { return n < 10 ? '0' + n : String(n); }
 
     function startGPSPings() {
-        // Immediate first ping
         sendLocationPing();
-
-        // Then every 60 seconds
         if (gpsInterval) clearInterval(gpsInterval);
         gpsInterval = setInterval(sendLocationPing, 60000);
     }
