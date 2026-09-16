@@ -222,6 +222,8 @@ function submitVisitor() {
     var hostName = document.getElementById('hostName').value.trim();
     var purpose = document.getElementById('visitorPurpose').value;
     var arrivedWithVehicle = document.getElementById('arrivedWithVehicle').checked;
+    var visitCommentEl = document.getElementById('visitComment');
+    var visitComment = visitCommentEl ? visitCommentEl.value.trim() : '';
 
     if (!visitorName) { showToast('Enter visitor name', 'error'); return; }
     if (!visitorId) { showToast('Enter ID number', 'error'); return; }
@@ -252,6 +254,7 @@ function submitVisitor() {
         visitor_company: visitorCompany,
         host_name: hostName,
         purpose: purpose,
+        visit_comment: visitComment,
         arrived_with_vehicle: arrivedWithVehicle,
         vehicle_plate: vehiclePlate,
         vehicle_type: vehicleType,
