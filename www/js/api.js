@@ -10,6 +10,7 @@
  *  - Detailed console logging for every request.
  *  - Improved error messages showing HTTP status + raw body.
  *  - Handles HTTP 0 (CORS / network / timeout) explicitly.
+ *  - Supervisor dashboard + shift + location endpoints.
  * ============================================================
  */
 
@@ -268,28 +269,23 @@ var RBApi = (function() {
             return request('/patrol/scan.php', 'POST', data);
         },
 
-        // ===== SUPERVISOR (Phase 2 - placeholders) =====
-        startShift: function() {
+        // ===== SUPERVISOR =====
+        getSupervisorDashboard: function(tenantId) {
+            var endpoint = '/supervisor/dashboard-12hr.php';
+            if (tenantId) endpoint += '?tenant_id=' + encodeURIComponent(tenantId);
+            return request(endpoint, 'GET');
+        },
+
+        startSupervisorShift: function() {
             return request('/supervisor/shift-start.php', 'POST', {});
         },
 
-        endShift: function() {
+        endSupervisorShift: function() {
             return request('/supervisor/shift-end.php', 'POST', {});
         },
 
-        pingLocation: function(lat, lng, accuracy, speed, heading, battery) {
-            return request('/supervisor/location.php', 'POST', {
-                latitude: lat,
-                longitude: lng,
-                accuracy_m: accuracy || null,
-                speed_kmh: speed || null,
-                heading_deg: heading || null,
-                battery_pct: battery || null
-            });
-        },
-
-        verifySupervisorPin: function(pin) {
-            return request('/supervisor/verify-pin.php', 'POST', { pin: pin });
+        sendSupervisorLocation: function(data) {
+            return request('/supervisor/location.php', 'POST', data);
         },
 
         // ===== DASHBOARD =====
