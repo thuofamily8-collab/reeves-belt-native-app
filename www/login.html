@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="theme-color" content="#0a192f">
-    <title>Login - Reeves Belt Guard</title>
+    <title>Login - Reeves Belt App</title>
     <link rel="stylesheet" href="css/app.css">
 </head>
 <body class="login-page">
@@ -46,9 +46,9 @@
     <script src="js/auth.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // If already logged in, go straight to dashboard
+            // If already logged in, go to the correct landing page based on role
             if (RBAuth.isLoggedIn()) {
-                window.location.href = 'dashboard.html';
+                window.location.href = RBAuth.getDefaultLandingPage();
                 return;
             }
 
@@ -99,7 +99,7 @@
 
                             btnText.textContent = 'SUCCESS!';
                             setTimeout(function() {
-                                window.location.href = 'dashboard.html';
+                                window.location.href = RBAuth.getDefaultLandingPage();
                             }, 400);
                         })
                         .catch(function(err) {
