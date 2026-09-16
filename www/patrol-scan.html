@@ -8,7 +8,6 @@
 
 <link rel="stylesheet" href="css/app.css">
 <link rel="stylesheet" href="css/forms.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js">
 
 <style>
 .patrol-header {
@@ -326,11 +325,20 @@
     <div id="loadingText">Loading...</div>
 </div>
 
-<!-- Scripts -->
+<!--
+  Script load order matters:
+  1. api.js          - server communication
+  2. offline.js      - offline queue
+  3. app.js          - app-wide utilities (toast, etc.)
+  4. permissions.js  - camera/location runtime prompts
+  5. jsqr.min.js     - QR decoding library (LOCAL, works offline)
+  6. patrol.js       - the patrol logic itself
+-->
 <script src="js/api.js"></script>
 <script src="js/offline.js"></script>
 <script src="js/app.js"></script>
 <script src="js/permissions.js"></script>
+<script src="js/jsqr.min.js"></script>
 <script src="js/patrol.js"></script>
 
 </body>
