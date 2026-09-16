@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#0a192f">
+    <title>Supervisor - Reeves Belt App</title>
+    <link rel="stylesheet" href="css/app.css">
+    <style>
+        body { background: #0a0e1a; color: #fff; margin: 0; font-family: -apple-system, "Segoe UI", Arial, sans-serif; }
+        .sup-container { padding: 16px; padding-bottom: 90px; }
+        .sup-header {
+            background: linear-gradient(135deg, #0a192f, #1a2f4a);
+            padding: 20px;
+            border-radius: 14px;
+            border-left: 4px solid #d4af37;
+            margin-bottom: 18px;
+        }
+        .sup-header h1 { color: #d4af37; font-size: 18px; margin: 0 0 6px 0; }
+        .sup-header p { color: #8892b0; font-size: 12px; margin: 0; }
+
+        .tenant-switcher {
+            background: rgba(212, 175, 55, 0.12);
+            border: 1px solid #d4af37;
+            border-radius: 10px;
+            padding: 12px;
+            margin-bottom: 18px;
+        }
+        .tenant-switcher label {
+            display: block;
+            font-size: 10px;
+            color: #8892b0;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 6px;
+        }
+        .tenant-switcher select {
+            width: 100%;
+            padding: 10px;
+            border-radius: 8px;
+            background: #0a0e1a;
+            color: #d4af37;
+            border: 1px solid #d4af37;
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        .stats-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .stat-mini {
+            background: linear-gradient(135deg, #0a192f, #1a2f4a);
+            padding: 14px;
+            border-radius: 12px;
+            border-left: 3px solid #d4af37;
+        }
+        .stat-mini-label { font-size: 9px; color: #8892b0; text-transform: uppercase; letter-spacing: 1px; }
+        .stat-mini-value { font-size: 24px; font-weight: 700; color: #d4af37; margin-top: 4px; }
+
+        .sup-section-title {
+            font-size: 13px;
+            color: #d4af37;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin: 20px 0 10px 0;
+            padding-left: 4px;
+        }
+
+        .guard-item {
+            background: #14192e;
+            padding: 14px;
+            border-radius: 10px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-left: 3px solid #555;
+        }
+        .guard-item.active { border-left-color: #10b981; }
+        .guard-item.idle { border-left-color: #f59e0b; }
+        .guard-item.offline { border-left-color: #94a3b8; }
+        .guard-info-name { font-weight: 700; font-size: 14px; color: #fff; }
+        .guard-info-sub { font-size: 11px; color: #8892b0; margin-top: 2px; }
+        .guard-status-badge {
+            font-size: 10px;
+            padding: 3px 9px;
+            border-radius: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+        .guard-status-badge.active { background: #10b981; color: #fff; }
+        .guard-status-badge.idle { background: #f59e0b; color: #fff; }
+        .guard-status-badge.offline { background: #94a3b8; color: #fff; }
+
+        .patrol-item {
+            background: #14192e;
+            padding: 12px;
+            border-radius: 10px;
+            margin-bottom: 6px;
+            font-size: 13px;
+        }
+        .patrol-checkpoint { font-weight: 700; color: #fff; }
+        .patrol-meta { font-size: 11px; color: #8892b0; margin-top: 4px; }
+
+        .empty-state-sup {
+            background: #14192e;
+            padding: 30px 20px;
+            border-radius: 10px;
+            text-align: center;
+            color: #8892b0;
+            font-size: 13px;
+        }
+
+        .shift-btn-container {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 16px;
+            background: linear-gradient(to top, #0a0e1a 60%, transparent);
+        }
+        .shift-btn {
+            width: 100%;
+            padding: 16px;
+            border: none;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            cursor: pointer;
+            background: linear-gradient(135deg, #d4af37, #f0d060);
+            color: #0a0e1a;
+            box-shadow: 0 6px 0 #b8860b;
+        }
+        .shift-btn.on-shift {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: #fff;
+            box-shadow: 0 6px 0 #991b1b;
+        }
+
+        #loadingOverlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.8);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            color: #d4af37;
+        }
+        #loadingOverlay.show { display: flex; }
+    </style>
+</head>
+<body>
+
+<div class="sup-container">
+
+    <div class="sup-header">
+        <h1>👁️ Supervisor Dashboard</h1>
+        <p id="supGreeting">Welcome back</p>
+    </div>
+
+    <div class="tenant-switcher">
+        <label>📍 Supervising Tenant</label>
+        <select id="tenantSwitcher" onchange="RBSupervisor.changeTenant(this.value)"></select>
+    </div>
+
+    <div class="stats-row">
+        <div class="stat-mini">
+            <div class="stat-mini-label">Guards</div>
+            <div class="stat-mini-value" id="statGuards">0</div>
+        </div>
+        <div class="stat-mini">
+            <div class="stat-mini-label">Scans (12h)</div>
+            <div class="stat-mini-value" id="statScans">0</div>
+        </div>
+    </div>
+
+    <div class="sup-section-title">👥 Guards</div>
+    <div id="guardsList">
+        <div class="empty-state-sup">Loading...</div>
+    </div>
+
+    <div class="sup-section-title">📍 Recent Patrols</div>
+    <div id="patrolsList">
+        <div class="empty-state-sup">Loading...</div>
+    </div>
+
+</div>
+
+<div class="shift-btn-container">
+    <button class="shift-btn" id="shiftToggleBtn" onclick="RBSupervisor.toggleShift()">
+        🚀 START SHIFT
+    </button>
+</div>
+
+<div id="loadingOverlay">
+    <div id="loadingText">Loading...</div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/offline.js"></script>
+<script src="js/app.js"></script>
+<script src="js/supervisor.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    RBSupervisor.init();
+});
+</script>
+
+</body>
+</html>
