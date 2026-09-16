@@ -1,121 +1,97 @@
 /**
  * ============================================================
- * PATROL MODULE LOGIC
- * QR scanning + GPS capture
+ * REEVES BELT APP - Patrol Module
+ * QR scanning, checkpoint tracking, offline sync
+ *
+ * UPDATED:
+ *  - Runtime camera permission request before scanner starts
+ *  - Graceful fallback if permission denied
  * ============================================================
  */
 
-var qrStream = null;
-var qrScanInterval = null;
-var scanCanvas = null;
-var scanCanvasContext = null;
 var checkpoints = [];
 var scannedCheckpoints = [];
+var qrStream = null;
+var qrScanInterval = null;
+var scanCanvas = document.createElement('canvas');
+var scanCanvasContext = scanCanvas.getContext('2d');
 var currentGPS = { lat: null, lng: null };
 
 // ============================================================
 // INIT
 // ============================================================
 document.addEventListener('DOMContentLoaded', function() {
-    if (!RBAuth.requireLogin()) return;
-
-    scanCanvas = document.createElement('canvas');
-    scanCanvasContext = scanCanvas.getContext('2d');
-
-    // Get GPS location immediately
-    getGPSLocation();
-
-    // Load checkpoints
-    loadCheckpoints();
-
-    // Load scanned count from local storage
     loadLocalScannedCheckpoints();
+    loadCheckpoints();
+    requestLocationSilently();
 });
 
-// ============================================================
-// GPS LOCATION
-// ============================================================
-function getGPSLocation() {
-    if (!navigator.geolocation) {
-        console.log('GPS not supported');
-        return;
+function requestLocationSilently() {
+    if (window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.Geolocation) {
+        Capacitor.Plugins.Geolocation.getCurrentPosition()
+            .then(function(pos) {
+                currentGPS.lat = pos.coords.latitude;
+                currentGPS.lng = pos.coords.longitude;
+            })
+            .catch(function() {});
+    } else if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            function(pos) {
+                currentGPS.lat = pos.coords.latitude;
+                currentGPS.lng = pos.coords.longitude;
+            },
+            function() {},
+            { enableHighAccuracy: true, timeout: 8000 }
+        );
     }
-
-    navigator.geolocation.getCurrentPosition(
-        function(position) {
-            currentGPS.lat = position.coords.latitude.toFixed(7);
-            currentGPS.lng = position.coords.longitude.toFixed(7);
-            console.log('GPS:', currentGPS);
-        },
-        function(error) {
-            console.log('GPS error:', error.message);
-        },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-    );
 }
 
-// ============================================================
-// LOAD CHECKPOINTS
-// ============================================================
 function loadCheckpoints() {
-    RBApi.getPatrolPoints()
-        .then(function(res) {
-            checkpoints = res.points || res.checkpoints || [];
-            renderCheckpoints();
-            renderManualSelect();
-            updateProgress();
-        })
-        .catch(function(err) {
-            // Fallback: use local defaults
-            checkpoints = getDefaultCheckpoints();
-            renderCheckpoints();
-            renderManualSelect();
-            updateProgress();
+    showLoading('Loading checkpoints...');
 
-            if (err.error) {
-                showToast('⚠️ ' + err.error, 'warning');
-            }
-        });
+    RBApi.getPatrolPoints().then(function(result) {
+        hideLoading();
+        checkpoints = (result && result.points) ? result.points : [];
+        renderCheckpoints();
+        renderManualSelect();
+        updateProgress();
+    }).catch(function(err) {
+        hideLoading();
+        showToast('Failed to load checkpoints: ' + (err.error || 'network'), 'error');
+    });
 }
 
-function getDefaultCheckpoints() {
-    // Fallback if API unavailable
-    return [
-        { id: 1, point_name: 'Main Gate', sequence_order: 1 },
-        { id: 2, point_name: 'Warehouse A', sequence_order: 2 },
-        { id: 3, point_name: 'Warehouse B', sequence_order: 3 },
-        { id: 4, point_name: 'Perimeter Fence', sequence_order: 4 },
-        { id: 5, point_name: 'Production Area', sequence_order: 5 }
-    ];
+// ============================================================
+// LOCAL STORAGE OF SCANNED CHECKPOINTS (per day)
+// ============================================================
+function todayKey() {
+    var d = new Date();
+    return 'rb_patrol_scanned_' + d.getFullYear() + '-' +
+           String(d.getMonth() + 1).padStart(2, '0') + '-' +
+           String(d.getDate()).padStart(2, '0');
 }
 
 function loadLocalScannedCheckpoints() {
     try {
-        var saved = localStorage.getItem('rb_patrol_scanned_' + todayKey());
-        if (saved) {
-            scannedCheckpoints = JSON.parse(saved);
-        }
+        var raw = localStorage.getItem(todayKey());
+        scannedCheckpoints = raw ? JSON.parse(raw) : [];
     } catch (e) {
         scannedCheckpoints = [];
     }
 }
 
 function saveLocalScannedCheckpoints() {
-    localStorage.setItem('rb_patrol_scanned_' + todayKey(), JSON.stringify(scannedCheckpoints));
-}
-
-function todayKey() {
-    var d = new Date();
-    return d.getFullYear() + '-' +
-        String(d.getMonth() + 1).padStart(2, '0') + '-' +
-        String(d.getDate()).padStart(2, '0');
+    try {
+        localStorage.setItem(todayKey(), JSON.stringify(scannedCheckpoints));
+    } catch (e) {}
 }
 
 // ============================================================
-// RENDER CHECKPOINTS LIST
+// RENDER
 // ============================================================
 function renderCheckpoints() {
     var container = document.getElementById('checkpointsList');
+    if (!container) return;
 
     if (checkpoints.length === 0) {
         container.innerHTML = '<div class="empty-state" style="padding: 20px;"><p>No checkpoints configured</p></div>';
@@ -128,7 +104,7 @@ function renderCheckpoints() {
         var isScanned = scannedCheckpoints.indexOf(cp.point_name) !== -1;
 
         html += '<div class="checkpoint-item ' + (isScanned ? 'completed' : '') + '">' +
-            '<div class="checkpoint-icon">' + (isScanned ? '✅' : '📍') + '</div>' +
+            '<div class="checkpoint-icon">' + (isScanned ? '✓' : '○') + '</div>' +
             '<div class="checkpoint-info">' +
                 '<div class="checkpoint-name">' + escapeHtml(cp.point_name) + '</div>' +
                 '<div class="checkpoint-order">Checkpoint #' + (cp.sequence_order || i + 1) + '</div>' +
@@ -136,12 +112,13 @@ function renderCheckpoints() {
         '</div>';
     }
     html += '</div>';
-
     container.innerHTML = html;
 }
 
 function renderManualSelect() {
     var select = document.getElementById('manualCheckpoint');
+    if (!select) return;
+
     select.innerHTML = '<option value="">-- Select Checkpoint --</option>';
 
     for (var i = 0; i < checkpoints.length; i++) {
@@ -154,9 +131,6 @@ function renderManualSelect() {
     }
 }
 
-// ============================================================
-// PROGRESS
-// ============================================================
 function updateProgress() {
     var total = checkpoints.length;
     var scanned = 0;
@@ -169,16 +143,36 @@ function updateProgress() {
 
     var percent = total > 0 ? Math.round((scanned / total) * 100) : 0;
 
-    document.getElementById('progressPercent').textContent = percent + '%';
-    document.getElementById('scannedCount').textContent = scanned;
-    document.getElementById('totalCount').textContent = total;
-    document.getElementById('remainingCount').textContent = total - scanned;
+    var percentEl = document.getElementById('progressPercent');
+    var scannedEl = document.getElementById('scannedCount');
+    var totalEl = document.getElementById('totalCount');
+    var remainingEl = document.getElementById('remainingCount');
+
+    if (percentEl) percentEl.textContent = percent + '%';
+    if (scannedEl) scannedEl.textContent = scanned;
+    if (totalEl) totalEl.textContent = total;
+    if (remainingEl) remainingEl.textContent = total - scanned;
 }
 
 // ============================================================
 // QR SCANNER
 // ============================================================
 function startScanner() {
+    // Runtime permission check first
+    if (typeof RBPermissions !== 'undefined') {
+        RBPermissions.requestCamera().then(function(granted) {
+            if (!granted) {
+                showToast('Camera permission denied. Enable it in Settings → Apps → Reeves Belt App → Permissions.', 'error');
+                return;
+            }
+            actuallyStartScanner();
+        });
+    } else {
+        actuallyStartScanner();
+    }
+}
+
+function actuallyStartScanner() {
     var video = document.getElementById('qrVideo');
     var placeholder = document.getElementById('scannerPlaceholder');
     var frame = document.getElementById('scannerFrame');
@@ -186,7 +180,7 @@ function startScanner() {
     var stopBtn = document.getElementById('stopScanBtn');
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        showToast('Camera not supported', 'error');
+        showToast('Camera not supported on this device', 'error');
         return;
     }
 
@@ -208,7 +202,6 @@ function startScanner() {
         startBtn.disabled = true;
         stopBtn.disabled = false;
 
-        // Start scanning every 300ms
         qrScanInterval = setInterval(scanQRFrame, 300);
     })
     .catch(function(err) {
@@ -218,7 +211,7 @@ function startScanner() {
 
 function scanQRFrame() {
     var video = document.getElementById('qrVideo');
-
+    if (!video) return;
     if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
     if (video.videoWidth === 0) return;
 
@@ -241,39 +234,35 @@ function scanQRFrame() {
 }
 
 function handleQRDetected(qrData) {
-    // Stop scanning to prevent multiple triggers
     stopScanner();
 
-    // Vibrate + beep to confirm
     if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
     playBeep();
 
-    // Match QR data to a checkpoint
     var matchedCheckpoint = matchCheckpoint(qrData);
 
-    // Show result
-    document.getElementById('scanResult').style.display = 'block';
+    var resultBox = document.getElementById('scanResult');
+    if (resultBox) resultBox.style.display = 'block';
 
     if (matchedCheckpoint) {
-        document.getElementById('scanSuccessText').textContent = 
-            '✅ ' + matchedCheckpoint.point_name + ' — Logging...';
-        
-        // Auto-submit
+        var successText = document.getElementById('scanSuccessText');
+        if (successText) successText.textContent = '✓ ' + matchedCheckpoint.point_name + ' - Logging...';
+
         setTimeout(function() {
             submitPatrolScan(matchedCheckpoint.point_name, qrData);
         }, 500);
     } else {
-        document.getElementById('scanSuccessText').textContent = 
-            '⚠️ QR not recognized: ' + qrData;
-        document.getElementById('scanSuccess').style.background = 
-            'rgba(245, 158, 11, 0.2)';
-        
+        var successText2 = document.getElementById('scanSuccessText');
+        if (successText2) successText2.textContent = '⚠ QR not recognized: ' + qrData;
+
+        var successBox = document.getElementById('scanSuccess');
+        if (successBox) successBox.style.background = 'rgba(245, 158, 11, 0.2)';
+
         showToast('QR code not recognized', 'warning');
     }
 }
 
 function matchCheckpoint(qrData) {
-    // Match by point_name, qr_code, or id
     for (var i = 0; i < checkpoints.length; i++) {
         var cp = checkpoints[i];
         if (cp.point_name === qrData ||
@@ -302,11 +291,11 @@ function stopScanner() {
     var startBtn = document.getElementById('startScanBtn');
     var stopBtn = document.getElementById('stopScanBtn');
 
-    video.style.display = 'none';
-    placeholder.style.display = 'block';
-    frame.style.display = 'none';
-    startBtn.disabled = false;
-    stopBtn.disabled = true;
+    if (video) video.style.display = 'none';
+    if (placeholder) placeholder.style.display = 'block';
+    if (frame) frame.style.display = 'none';
+    if (startBtn) startBtn.disabled = false;
+    if (stopBtn) stopBtn.disabled = true;
 }
 
 // ============================================================
@@ -324,12 +313,13 @@ function submitPatrolScan(checkpointName, qrData) {
         sync_hash: 'patrol-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9)
     };
 
-    OfflineSync.queueRecord('patrol_scan', data);
+    if (typeof OfflineSync !== 'undefined' && OfflineSync.queueRecord) {
+        OfflineSync.queueRecord('patrol_scan', data);
+    }
 
-    OfflineSync.syncNow().then(function(result) {
+    RBApi.logPatrolScan(data).then(function(result) {
         hideLoading();
 
-        // Mark as scanned locally
         if (scannedCheckpoints.indexOf(checkpointName) === -1) {
             scannedCheckpoints.push(checkpointName);
             saveLocalScannedCheckpoints();
@@ -339,29 +329,51 @@ function submitPatrolScan(checkpointName, qrData) {
         renderManualSelect();
         updateProgress();
 
-        // Hide result after 3 sec
         setTimeout(function() {
-            document.getElementById('scanResult').style.display = 'none';
+            var box = document.getElementById('scanResult');
+            if (box) box.style.display = 'none';
         }, 3000);
 
-        if (result.synced > 0) {
-            showToast('✅ ' + checkpointName + ' logged', 'success');
+        showToast('✓ ' + checkpointName + ' logged', 'success');
+    }).catch(function(err) {
+        hideLoading();
+
+        // Queue for offline sync
+        if (typeof OfflineSync !== 'undefined' && OfflineSync.queueRecord) {
+            if (scannedCheckpoints.indexOf(checkpointName) === -1) {
+                scannedCheckpoints.push(checkpointName);
+                saveLocalScannedCheckpoints();
+            }
+            renderCheckpoints();
+            renderManualSelect();
+            updateProgress();
+            showToast('⚠ Saved locally - will sync', 'warning');
         } else {
-            showToast('💾 Saved locally — will sync', 'warning');
+            showToast('Failed: ' + (err.error || 'network error'), 'error');
         }
     });
 }
 
 function submitManualScan() {
     var select = document.getElementById('manualCheckpoint');
-    var checkpointName = select.value;
+    if (!select) return;
 
+    var checkpointName = select.value;
     if (!checkpointName) {
         showToast('Select a checkpoint', 'error');
         return;
     }
 
-    submitPatrolScan(checkpointName, checkpointName);
+    // Find qr_code for this checkpoint
+    var qrData = checkpointName;
+    for (var i = 0; i < checkpoints.length; i++) {
+        if (checkpoints[i].point_name === checkpointName) {
+            qrData = checkpoints[i].qr_code || checkpointName;
+            break;
+        }
+    }
+
+    submitPatrolScan(checkpointName, qrData);
 }
 
 // ============================================================
@@ -389,12 +401,15 @@ function escapeHtml(text) {
 }
 
 function showLoading(text) {
-    document.getElementById('loadingText').textContent = text;
-    document.getElementById('loadingOverlay').classList.add('show');
+    var el = document.getElementById('loadingText');
+    var overlay = document.getElementById('loadingOverlay');
+    if (el) el.textContent = text;
+    if (overlay) overlay.classList.add('show');
 }
 
 function hideLoading() {
-    document.getElementById('loadingOverlay').classList.remove('show');
+    var overlay = document.getElementById('loadingOverlay');
+    if (overlay) overlay.classList.remove('show');
 }
 
 function showToast(message, type) {
