@@ -6,6 +6,9 @@
  * UPDATED:
  *  - Runtime camera permission request before scanner starts
  *  - Graceful fallback if permission denied
+ *  - Cropped scan region for higher QR accuracy
+ *  - attemptBoth inversion for reliable screen scanning
+ *  - Higher camera resolution + faster interval
  * ============================================================
  */
 
@@ -189,20 +192,40 @@ function actuallyStartScanner() {
         return;
     }
 
-    navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1280 } },
-        audio: false
-    })
+    // Try to force continuous autofocus where supported
+    var constraints = {
+        audio: false,
+        video: {
+            facingMode: { ideal: 'environment' },
+            width:  { ideal: 1920, min: 640 },
+            height: { ideal: 1080, min: 480 },
+            focusMode: 'continuous',
+            advanced: [{ focusMode: 'continuous' }]
+        }
+    };
+
+    navigator.mediaDevices.getUserMedia(constraints)
     .then(function(stream) {
         qrStream = stream;
         video.srcObject = stream;
         video.style.display = 'block';
+        video.setAttribute('playsinline', 'true');
+        video.setAttribute('autoplay', 'true');
+        video.setAttribute('muted', 'true');
+
         placeholder.style.display = 'none';
         frame.style.display = 'block';
         startBtn.disabled = true;
         stopBtn.disabled = false;
 
-        qrScanInterval = setInterval(scanQRFrame, 300);
+        // Wait for video metadata before starting scan loop
+        video.onloadedmetadata = function() {
+            video.play().catch(function() {});
+            // Kick off scan loop after a short warm-up
+            setTimeout(function() {
+                qrScanInterval = setInterval(scanQRFrame, 150);
+            }, 500);
+        };
     })
     .catch(function(err) {
         showToast('Camera error: ' + err.message, 'error');
@@ -213,16 +236,35 @@ function scanQRFrame() {
     var video = document.getElementById('qrVideo');
     if (!video) return;
     if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
-    if (video.videoWidth === 0) return;
+    if (video.videoWidth === 0 || video.videoHeight === 0) return;
 
+    // Use full frame for canvas, but CROP to the central scan region
     scanCanvas.width = video.videoWidth;
     scanCanvas.height = video.videoHeight;
     scanCanvasContext.drawImage(video, 0, 0, scanCanvas.width, scanCanvas.height);
 
+    // Crop to central 70% (matches roughly what's inside the visual frame)
+    var cropW = Math.floor(scanCanvas.width * 0.7);
+    var cropH = Math.floor(scanCanvas.height * 0.7);
+    var cropX = Math.floor((scanCanvas.width - cropW) / 2);
+    var cropY = Math.floor((scanCanvas.height - cropH) / 2);
+
+    var imageData;
     try {
-        var imageData = scanCanvasContext.getImageData(0, 0, scanCanvas.width, scanCanvas.height);
+        imageData = scanCanvasContext.getImageData(cropX, cropY, cropW, cropH);
+    } catch (e) {
+        // Fallback: use full frame
+        try {
+            imageData = scanCanvasContext.getImageData(0, 0, scanCanvas.width, scanCanvas.height);
+        } catch (e2) {
+            console.log('Scan error: cannot get image data', e2);
+            return;
+        }
+    }
+
+    try {
         var code = jsQR(imageData.data, imageData.width, imageData.height, {
-            inversionAttempts: 'dontInvert'
+            inversionAttempts: 'attemptBoth'
         });
 
         if (code && code.data) {
@@ -338,7 +380,6 @@ function submitPatrolScan(checkpointName, qrData) {
     }).catch(function(err) {
         hideLoading();
 
-        // Queue for offline sync
         if (typeof OfflineSync !== 'undefined' && OfflineSync.queueRecord) {
             if (scannedCheckpoints.indexOf(checkpointName) === -1) {
                 scannedCheckpoints.push(checkpointName);
@@ -364,7 +405,6 @@ function submitManualScan() {
         return;
     }
 
-    // Find qr_code for this checkpoint
     var qrData = checkpointName;
     for (var i = 0; i < checkpoints.length; i++) {
         if (checkpoints[i].point_name === checkpointName) {
