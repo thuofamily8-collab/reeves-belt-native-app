@@ -1,17 +1,22 @@
 /**
  * ============================================================
- * REEVES BELT SECURE 360 - API CLIENT
+ * REEVES BELT APP - API CLIENT
  * Handles all communication with the server
  * Supports offline mode with request queueing
  *
- * UPDATED: Sends both Authorization and X-Auth-Token headers
- *          to survive proxy stripping on shared hosting.
+ * UPDATED:
+ *  - Sends both Authorization and X-Auth-Token headers
+ *    to survive proxy stripping on shared hosting.
+ *  - Detailed console logging for every request.
+ *  - Improved error messages showing HTTP status + raw body.
+ *  - Handles HTTP 0 (CORS / network / timeout) explicitly.
  * ============================================================
  */
 
 var RBApi = (function() {
 
     var BASE_URL = 'https://www.pajhub.co.ke/api/v1';
+    var DEBUG = true;  // set to false for production
 
     // ============================================================
     // STORAGE HELPERS (Capacitor Preferences or localStorage)
@@ -78,58 +83,101 @@ var RBApi = (function() {
     }
 
     // ============================================================
+    // DEBUG LOGGER
+    // ============================================================
+    function log() {
+        if (!DEBUG) return;
+        var args = Array.prototype.slice.call(arguments);
+        args.unshift('[RBApi]');
+        try { console.log.apply(console, args); } catch (e) {}
+    }
+
+    // ============================================================
     // CORE REQUEST FUNCTION
     // ============================================================
     function request(endpoint, method, data) {
         method = method || 'GET';
 
         return new Promise(function(resolve, reject) {
+            var url = BASE_URL + endpoint;
             var xhr = new XMLHttpRequest();
-            xhr.open(method, BASE_URL + endpoint, true);
+            xhr.open(method, url, true);
             xhr.setRequestHeader('Content-Type', 'application/json');
             xhr.setRequestHeader('Accept', 'application/json');
 
             var token = getToken();
+            var hasAuth = false;
             if (token) {
-                // Send BOTH headers:
-                //  - Authorization:  standard Bearer (works if proxy permits)
-                //  - X-Auth-Token:   raw token (survives proxy stripping on shared hosts)
                 xhr.setRequestHeader('Authorization', 'Bearer ' + token);
                 xhr.setRequestHeader('X-Auth-Token', token);
+                hasAuth = true;
             }
 
-            xhr.timeout = 15000;
+            log(method + ' ' + url + ' | auth=' + hasAuth + (data ? ' | body=' + JSON.stringify(data).substring(0, 120) : ''));
+
+            xhr.timeout = 20000;
 
             xhr.onreadystatechange = function() {
-                if (xhr.readyState === 4) {
-                    var response;
-                    try {
-                        response = JSON.parse(xhr.responseText);
-                    } catch (e) {
-                        response = {
-                            success: false,
-                            error: 'Server returned invalid response',
-                            raw: xhr.responseText ? xhr.responseText.substring(0, 200) : '(empty)'
-                        };
-                    }
+                if (xhr.readyState !== 4) return;
 
-                    if (xhr.status >= 200 && xhr.status < 300 && response.success) {
-                        resolve(response);
-                    } else if (xhr.status === 401) {
-                        clearToken();
-                        reject({ success: false, error: 'Session expired', code: 'unauthorized' });
-                    } else {
-                        reject(response);
-                    }
+                log('RESPONSE ' + method + ' ' + url + ' | status=' + xhr.status + ' | len=' + (xhr.responseText ? xhr.responseText.length : 0));
+                log('BODY (first 400):', xhr.responseText ? xhr.responseText.substring(0, 400) : '(empty)');
+
+                // HTTP 0 = network/CORS block/timeout
+                if (xhr.status === 0) {
+                    reject({
+                        success: false,
+                        error: 'Cannot reach server. Check internet or server may be down.',
+                        code: 'no_response',
+                        httpStatus: 0
+                    });
+                    return;
+                }
+
+                var response;
+                try {
+                    response = JSON.parse(xhr.responseText);
+                } catch (e) {
+                    response = {
+                        success: false,
+                        error: 'HTTP ' + xhr.status + ' — ' + (xhr.responseText ? xhr.responseText.substring(0, 200) : '(empty response)'),
+                        raw: xhr.responseText ? xhr.responseText.substring(0, 500) : '(empty)',
+                        httpStatus: xhr.status
+                    };
+                }
+
+                if (xhr.status >= 200 && xhr.status < 300 && response.success) {
+                    resolve(response);
+                } else if (xhr.status === 401) {
+                    clearToken();
+                    reject({
+                        success: false,
+                        error: 'Session expired',
+                        code: 'unauthorized',
+                        httpStatus: 401
+                    });
+                } else {
+                    if (response && !response.httpStatus) response.httpStatus = xhr.status;
+                    reject(response);
                 }
             };
 
             xhr.onerror = function() {
-                reject({ success: false, error: 'Network error. Check your connection.', code: 'network_error' });
+                log('XHR ERROR for ' + url);
+                reject({
+                    success: false,
+                    error: 'Network error. Check your connection.',
+                    code: 'network_error'
+                });
             };
 
             xhr.ontimeout = function() {
-                reject({ success: false, error: 'Request timed out.', code: 'timeout' });
+                log('XHR TIMEOUT for ' + url);
+                reject({
+                    success: false,
+                    error: 'Request timed out.',
+                    code: 'timeout'
+                });
             };
 
             if (data) {
@@ -149,8 +197,12 @@ var RBApi = (function() {
         setToken: setToken,
         clearToken: clearToken,
 
+        // Base URL (read-only, useful for debugging)
+        getBaseUrl: function() { return BASE_URL; },
+
         // ===== AUTH =====
         login: function(username, password, deviceInfo) {
+            deviceInfo = deviceInfo || {};
             return request('/auth/login.php', 'POST', {
                 username: username,
                 password: password,
@@ -214,6 +266,30 @@ var RBApi = (function() {
 
         logPatrolScan: function(data) {
             return request('/patrol/scan.php', 'POST', data);
+        },
+
+        // ===== SUPERVISOR (Phase 2 - placeholders) =====
+        startShift: function() {
+            return request('/supervisor/shift-start.php', 'POST', {});
+        },
+
+        endShift: function() {
+            return request('/supervisor/shift-end.php', 'POST', {});
+        },
+
+        pingLocation: function(lat, lng, accuracy, speed, heading, battery) {
+            return request('/supervisor/location.php', 'POST', {
+                latitude: lat,
+                longitude: lng,
+                accuracy_m: accuracy || null,
+                speed_kmh: speed || null,
+                heading_deg: heading || null,
+                battery_pct: battery || null
+            });
+        },
+
+        verifySupervisorPin: function(pin) {
+            return request('/supervisor/verify-pin.php', 'POST', { pin: pin });
         },
 
         // ===== DASHBOARD =====
