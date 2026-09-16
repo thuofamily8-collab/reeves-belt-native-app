@@ -205,12 +205,17 @@
 <script src="js/api.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/offline.js"></script>
+<script src="js/permissions.js"></script>
 <script src="js/app.js"></script>
 <script src="js/supervisor.js"></script>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    RBSupervisor.init();
+    try {
+        RBSupervisor.init();
+    } catch (e) {
+        console.error('RBSupervisor.init failed:', e);
+    }
 });
 </script>
 
