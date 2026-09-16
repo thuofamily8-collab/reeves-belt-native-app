@@ -22,7 +22,7 @@ jobs:
         uses: actions/checkout@v4
 
       # ------------------------------------------------------------
-      # 2. Node.js setup (Capacitor CLI needs Node)
+      # 2. Node.js setup
       # ------------------------------------------------------------
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -30,7 +30,7 @@ jobs:
           node-version: '22'
 
       # ------------------------------------------------------------
-      # 3. Java JDK for Gradle
+      # 3. Java JDK
       # ------------------------------------------------------------
       - name: Setup Java JDK 17
         uses: actions/setup-java@v4
@@ -40,7 +40,6 @@ jobs:
 
       # ------------------------------------------------------------
       # 4. Android SDK
-      #    FIX: explicitly pass packages to avoid deprecated 'tools'
       # ------------------------------------------------------------
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
@@ -54,7 +53,7 @@ jobs:
         run: npm install
 
       # ------------------------------------------------------------
-      # 6. Add Android platform (if not already present)
+      # 6. Add Android platform
       # ------------------------------------------------------------
       - name: Add Android platform
         run: |
@@ -63,26 +62,51 @@ jobs:
           fi
 
       # ------------------------------------------------------------
-      # 7. Sync web assets into native project
+      # 7. Patch AndroidManifest.xml with required permissions
+      #    (camera, location, foreground service, boot receiver)
+      # ------------------------------------------------------------
+      - name: Patch AndroidManifest permissions
+        run: |
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+          if ! grep -q 'android.permission.CAMERA' "$MANIFEST"; then
+            sed -i '/<application/i \
+              <uses-permission android:name="android.permission.CAMERA" />\
+              <uses-permission android:name="android.permission.FLASHLIGHT" />\
+              <uses-permission android:name="android.permission.INTERNET" />\
+              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />\
+              <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\
+              <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\
+              <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />\
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\
+              <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />\
+              <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />\
+              <uses-feature android:name="android.hardware.camera" android:required="true" />\
+              <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />' "$MANIFEST"
+          fi
+          echo "--- Manifest after patch ---"
+          cat "$MANIFEST"
+
+      # ------------------------------------------------------------
+      # 8. Capacitor sync
       # ------------------------------------------------------------
       - name: Capacitor sync
         run: npx cap sync android
 
       # ------------------------------------------------------------
-      # 8. Make Gradle wrapper executable
+      # 9. Make gradlew executable
       # ------------------------------------------------------------
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
       # ------------------------------------------------------------
-      # 9. Build debug APK
+      # 10. Build Debug APK
       # ------------------------------------------------------------
       - name: Build Debug APK
         working-directory: android
         run: ./gradlew assembleDebug --stacktrace
 
       # ------------------------------------------------------------
-      # 10. Rename APK with a friendly, timestamped name
+      # 11. Prepare artifact
       # ------------------------------------------------------------
       - name: Prepare APK artifact
         run: |
@@ -93,7 +117,7 @@ jobs:
           ls -la artifacts/
 
       # ------------------------------------------------------------
-      # 11. Upload APK as a downloadable artifact
+      # 12. Upload APK
       # ------------------------------------------------------------
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -104,7 +128,7 @@ jobs:
           if-no-files-found: error
 
       # ------------------------------------------------------------
-      # 12. Optional: attach to GitHub Release when a tag is pushed
+      # 13. Attach to release if tagged
       # ------------------------------------------------------------
       - name: Attach APK to GitHub Release
         if: github.event_name == 'release'
