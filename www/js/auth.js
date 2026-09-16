@@ -20,6 +20,28 @@ var RBAuth = (function() {
         }
     }
 
+    /**
+     * NEW: Return the user's role (or empty string if not logged in)
+     */
+    function getRole() {
+        var u = getCurrentUser();
+        return u && u.role ? u.role : '';
+    }
+
+    /**
+     * NEW: True if the current user has the supervisor role
+     */
+    function isSupervisor() {
+        return getRole() === 'supervisor';
+    }
+
+    /**
+     * NEW: Where to send the user after login (based on role)
+     */
+    function getDefaultLandingPage() {
+        return isSupervisor() ? 'supervisor.html' : 'dashboard.html';
+    }
+
     function getTenantName() {
         return localStorage.getItem('rb_tenant_name') || 'No Tenant';
     }
@@ -43,7 +65,7 @@ var RBAuth = (function() {
         localStorage.setItem('rb_tenant_name', data.tenant_name || '');
         localStorage.setItem('rb_permissions', JSON.stringify(data.permissions || []));
         localStorage.setItem('rb_expires_at', data.expires_at || '');
-        
+
         // Also save to Capacitor Preferences for native persistence
         if (window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.Preferences) {
             var P = Capacitor.Plugins.Preferences;
@@ -61,7 +83,7 @@ var RBAuth = (function() {
         localStorage.removeItem('rb_tenant_name');
         localStorage.removeItem('rb_permissions');
         localStorage.removeItem('rb_expires_at');
-        
+
         if (window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.Preferences) {
             var P = Capacitor.Plugins.Preferences;
             P.remove({ key: 'rb_token' });
@@ -92,6 +114,9 @@ var RBAuth = (function() {
     return {
         isLoggedIn: isLoggedIn,
         getCurrentUser: getCurrentUser,
+        getRole: getRole,
+        isSupervisor: isSupervisor,
+        getDefaultLandingPage: getDefaultLandingPage,
         getTenantName: getTenantName,
         getPermissions: getPermissions,
         hasPermission: hasPermission,
