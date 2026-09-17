@@ -30,7 +30,7 @@ jobs:
           node-version: '22'
 
       # ------------------------------------------------------------
-      # 3. Java JDK
+      # 3. Java JDK for Gradle
       # ------------------------------------------------------------
       - name: Setup Java JDK 17
         uses: actions/setup-java@v4
@@ -53,7 +53,7 @@ jobs:
         run: npm install
 
       # ------------------------------------------------------------
-      # 6. Add Android platform (generates android/ folder)
+      # 6. Add Android platform
       # ------------------------------------------------------------
       - name: Add Android platform
         run: |
@@ -62,15 +62,32 @@ jobs:
           fi
 
       # ------------------------------------------------------------
-      # 7. Generate Android icons + splash screens from resources/
+      # 7. Patch target SDK for Android 14+ compatibility
+      #    Android 14 requires apps to target SDK 23 or higher.
+      #    We target 34 for maximum compatibility and Play Store compliance.
       # ------------------------------------------------------------
-      - name: Generate Android assets
+      - name: Patch target SDK for Android 14 compatibility
         run: |
-          npx @capacitor/assets generate \
-            --android \
-            --iconBackgroundColor '#0a0e1a' \
-            --splashBackgroundColor '#0a0e1a'
-        continue-on-error: true
+          cat > android/variables.gradle << 'EOF'
+          ext {
+              minSdkVersion = 26
+              compileSdkVersion = 34
+              targetSdkVersion = 34
+              androidxActivityVersion = '1.8.0'
+              androidxAppCompatVersion = '1.6.1'
+              androidxCoordinatorLayoutVersion = '1.2.0'
+              androidxCoreVersion = '1.12.0'
+              androidxFragmentVersion = '1.6.0'
+              coreSplashScreenVersion = '1.0.1'
+              androidxWebkitVersion = '1.9.0'
+              junitVersion = '4.13.2'
+              androidxJunitVersion = '1.1.5'
+              androidxEspressoCoreVersion = '3.5.1'
+              cordovaAndroidVersion = '10.1.1'
+          }
+          EOF
+          echo "--- variables.gradle after patch ---"
+          cat android/variables.gradle
 
       # ------------------------------------------------------------
       # 8. Patch AndroidManifest.xml with required permissions
@@ -97,13 +114,13 @@ jobs:
           cat "$MANIFEST"
 
       # ------------------------------------------------------------
-      # 9. Capacitor sync (copy www/ + config into android/)
+      # 9. Capacitor sync
       # ------------------------------------------------------------
       - name: Capacitor sync
         run: npx cap sync android
 
       # ------------------------------------------------------------
-      # 10. Make gradlew executable
+      # 10. Make Gradle wrapper executable
       # ------------------------------------------------------------
       - name: Make gradlew executable
         run: chmod +x android/gradlew
@@ -138,7 +155,7 @@ jobs:
           if-no-files-found: error
 
       # ------------------------------------------------------------
-      # 14. Attach to release if tagged
+      # 14. Attach APK to GitHub Release (optional, on tags)
       # ------------------------------------------------------------
       - name: Attach APK to GitHub Release
         if: github.event_name == 'release'
