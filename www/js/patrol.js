@@ -4,11 +4,11 @@
  * QR scanning, checkpoint tracking, offline sync
  *
  * UPDATED:
- *  - Runtime camera permission request before scanner starts
- *  - Graceful fallback if permission denied
- *  - Cropped scan region for higher QR accuracy
- *  - attemptBoth inversion for reliable screen scanning
- *  - Higher camera resolution + faster interval
+ *  - Dual-pass decode: full frame + cropped center
+ *  - Fast path: dontInvert first, then attemptBoth
+ *  - Faster scan interval (100ms)
+ *  - Continuous autofocus hint
+ *  - Immediate vibrate on detection
  * ============================================================
  */
 
@@ -19,6 +19,8 @@ var qrScanInterval = null;
 var scanCanvas = document.createElement('canvas');
 var scanCanvasContext = scanCanvas.getContext('2d');
 var currentGPS = { lat: null, lng: null };
+var lastDetectedCode = '';
+var lastDetectedAt = 0;
 
 // ============================================================
 // INIT
@@ -161,7 +163,6 @@ function updateProgress() {
 // QR SCANNER
 // ============================================================
 function startScanner() {
-    // Runtime permission check first
     if (typeof RBPermissions !== 'undefined') {
         RBPermissions.requestCamera().then(function(granted) {
             if (!granted) {
@@ -192,15 +193,14 @@ function actuallyStartScanner() {
         return;
     }
 
-    // Try to force continuous autofocus where supported
+    // Camera constraints — request high res + autofocus hint
     var constraints = {
         audio: false,
         video: {
             facingMode: { ideal: 'environment' },
             width:  { ideal: 1920, min: 640 },
             height: { ideal: 1080, min: 480 },
-            focusMode: 'continuous',
-            advanced: [{ focusMode: 'continuous' }]
+            focusMode: 'continuous'
         }
     };
 
@@ -218,13 +218,27 @@ function actuallyStartScanner() {
         startBtn.disabled = true;
         stopBtn.disabled = false;
 
-        // Wait for video metadata before starting scan loop
+        // Apply continuous autofocus if supported
+        try {
+            var track = stream.getVideoTracks()[0];
+            var capabilities = track.getCapabilities ? track.getCapabilities() : {};
+            var advanced = [];
+            if (capabilities.focusMode && capabilities.focusMode.indexOf('continuous') >= 0) {
+                advanced.push({ focusMode: 'continuous' });
+            }
+            if (advanced.length > 0) {
+                track.applyConstraints({ advanced: advanced });
+            }
+        } catch (e) {
+            console.log('Autofocus hint failed:', e);
+        }
+
         video.onloadedmetadata = function() {
             video.play().catch(function() {});
-            // Kick off scan loop after a short warm-up
             setTimeout(function() {
-                qrScanInterval = setInterval(scanQRFrame, 150);
-            }, 500);
+                // Faster scan — 100ms
+                qrScanInterval = setInterval(scanQRFrame, 100);
+            }, 400);
         };
     })
     .catch(function(err) {
@@ -238,46 +252,76 @@ function scanQRFrame() {
     if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
     if (video.videoWidth === 0 || video.videoHeight === 0) return;
 
-    // Use full frame for canvas, but CROP to the central scan region
+    // Draw full frame
     scanCanvas.width = video.videoWidth;
     scanCanvas.height = video.videoHeight;
     scanCanvasContext.drawImage(video, 0, 0, scanCanvas.width, scanCanvas.height);
 
-    // Crop to central 70% (matches roughly what's inside the visual frame)
-    var cropW = Math.floor(scanCanvas.width * 0.7);
-    var cropH = Math.floor(scanCanvas.height * 0.7);
-    var cropX = Math.floor((scanCanvas.width - cropW) / 2);
-    var cropY = Math.floor((scanCanvas.height - cropH) / 2);
+    var code = null;
 
-    var imageData;
+    // ---------- PASS 1: cropped center, dontInvert (fast) ----------
     try {
-        imageData = scanCanvasContext.getImageData(cropX, cropY, cropW, cropH);
+        var cropW = Math.floor(scanCanvas.width * 0.7);
+        var cropH = Math.floor(scanCanvas.height * 0.7);
+        var cropX = Math.floor((scanCanvas.width - cropW) / 2);
+        var cropY = Math.floor((scanCanvas.height - cropH) / 2);
+
+        var imageData = scanCanvasContext.getImageData(cropX, cropY, cropW, cropH);
+
+        code = jsQR(imageData.data, imageData.width, imageData.height, {
+            inversionAttempts: 'dontInvert'
+        });
     } catch (e) {
-        // Fallback: use full frame
+        console.log('Pass 1 error:', e);
+    }
+
+    // ---------- PASS 2: full frame, dontInvert ----------
+    if (!code) {
         try {
-            imageData = scanCanvasContext.getImageData(0, 0, scanCanvas.width, scanCanvas.height);
-        } catch (e2) {
-            console.log('Scan error: cannot get image data', e2);
-            return;
+            var fullData = scanCanvasContext.getImageData(0, 0, scanCanvas.width, scanCanvas.height);
+            code = jsQR(fullData.data, fullData.width, fullData.height, {
+                inversionAttempts: 'dontInvert'
+            });
+        } catch (e) {
+            console.log('Pass 2 error:', e);
         }
     }
 
-    try {
-        var code = jsQR(imageData.data, imageData.width, imageData.height, {
-            inversionAttempts: 'attemptBoth'
-        });
+    // ---------- PASS 3: cropped, attemptBoth (slow fallback) ----------
+    if (!code) {
+        try {
+            var cropW2 = Math.floor(scanCanvas.width * 0.7);
+            var cropH2 = Math.floor(scanCanvas.height * 0.7);
+            var cropX2 = Math.floor((scanCanvas.width - cropW2) / 2);
+            var cropY2 = Math.floor((scanCanvas.height - cropH2) / 2);
 
-        if (code && code.data) {
-            handleQRDetected(code.data);
+            var imageData2 = scanCanvasContext.getImageData(cropX2, cropY2, cropW2, cropH2);
+
+            code = jsQR(imageData2.data, imageData2.width, imageData2.height, {
+                inversionAttempts: 'attemptBoth'
+            });
+        } catch (e) {
+            console.log('Pass 3 error:', e);
         }
-    } catch (e) {
-        console.log('Scan error:', e);
+    }
+
+    if (code && code.data) {
+        handleQRDetected(code.data);
     }
 }
 
 function handleQRDetected(qrData) {
+    // Debounce — prevent same code from firing twice within 2 seconds
+    var now = Date.now();
+    if (qrData === lastDetectedCode && (now - lastDetectedAt) < 2000) {
+        return;
+    }
+    lastDetectedCode = qrData;
+    lastDetectedAt = now;
+
     stopScanner();
 
+    // Immediate feedback
     if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
     playBeep();
 
@@ -292,7 +336,7 @@ function handleQRDetected(qrData) {
 
         setTimeout(function() {
             submitPatrolScan(matchedCheckpoint.point_name, qrData);
-        }, 500);
+        }, 300);
     } else {
         var successText2 = document.getElementById('scanSuccessText');
         if (successText2) successText2.textContent = '⚠ QR not recognized: ' + qrData;
