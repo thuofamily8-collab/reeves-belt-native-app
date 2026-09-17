@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#0a0e1a">
+    <title>On Duty - Reeves Belt App</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body {
+            height: 100%;
+            background: #0a0e1a;
+            color: #fff;
+            font-family: -apple-system, "Segoe UI", Arial, sans-serif;
+            overflow: hidden;
+        }
+        .top-actions {
+            position: absolute; top: 12px; right: 12px; z-index: 20;
+            display: flex; gap: 8px;
+        }
+        .top-actions button {
+            background: rgba(212, 175, 55, 0.15);
+            border: 1px solid #d4af37;
+            color: #d4af37;
+            font-size: 12px; font-weight: 700;
+            padding: 8px 14px; border-radius: 20px;
+            cursor: pointer; text-transform: uppercase; letter-spacing: 1px;
+        }
+        .shift-screen {
+            display: flex; flex-direction: column; height: 100%;
+            padding: 60px 20px 20px; align-items: center; justify-content: flex-start;
+            overflow-y: auto; position: relative;
+        }
+        .shift-screen::before {
+            content: ''; position: absolute; inset: 0;
+            background: radial-gradient(circle at center, rgba(16, 185, 129, 0.15), transparent 60%);
+            pointer-events: none; animation: pulse 3s ease-in-out infinite;
+        }
+        @keyframes pulse { 0%,100% { opacity: 0.6; } 50% { opacity: 1; } }
+        .shift-header { text-align: center; margin-bottom: 20px; position: relative; z-index: 2; }
+        .shift-status {
+            display: inline-block;
+            background: rgba(16, 185, 129, 0.2); border: 2px solid #10b981;
+            color: #10b981; padding: 6px 16px; border-radius: 20px;
+            font-size: 11px; font-weight: 700; letter-spacing: 2px;
+            margin-bottom: 14px; text-transform: uppercase;
+        }
+        .shift-title { font-size: 22px; font-weight: 700; color: #fff; margin-bottom: 6px; }
+        .shift-tenant { font-size: 14px; color: #d4af37; font-weight: 600; }
+        .shift-timer-wrap {
+            width: 100%; max-width: 480px; display: flex;
+            justify-content: center; align-items: center;
+            margin: 24px auto; position: relative; z-index: 2;
+        }
+        .shift-timer {
+            font-family: "Courier New", monospace; color: #d4af37;
+            letter-spacing: 4px; font-weight: 700;
+            text-shadow: 0 0 20px rgba(212, 175, 55, 0.5);
+            font-size: 12vw; line-height: 1; white-space: nowrap; text-align: center;
+        }
+        .shift-info-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+            width: 100%; max-width: 400px; margin-top: 10px;
+            position: relative; z-index: 2;
+        }
+        .shift-info-card {
+            background: #14192e; border-radius: 12px; padding: 14px;
+            border-left: 3px solid #d4af37;
+        }
+        .shift-info-label {
+            font-size: 10px; color: #8892b0;
+            text-transform: uppercase; letter-spacing: 1px;
+        }
+        .shift-info-value { font-size: 15px; color: #fff; margin-top: 4px; font-weight: 600; }
+        .shift-info-value.green { color: #10b981; }
+        .shift-info-value.red { color: #ef4444; }
+        .shift-info-value.yellow { color: #f59e0b; }
+        .shift-footer {
+            position: fixed; bottom: 0; left: 0; right: 0;
+            padding: 16px 20px 20px;
+            background: linear-gradient(to top, #0a0e1a 70%, transparent);
+            z-index: 10;
+        }
+        .shift-footer button {
+            width: 100%; padding: 16px; border: none; border-radius: 12px;
+            font-size: 15px; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 1px; cursor: pointer;
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: #fff; box-shadow: 0 6px 0 #991b1b;
+        }
+        .shift-footer .hint {
+            text-align: center; color: #8892b0; font-size: 11px; margin-top: 10px;
+        }
+        .pin-modal {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.9);
+            display: none; align-items: center; justify-content: center;
+            z-index: 100; padding: 20px;
+        }
+        .pin-modal.show { display: flex; }
+        .pin-box {
+            background: #14192e; border-radius: 16px; padding: 24px;
+            width: 100%; max-width: 320px; border: 2px solid #d4af37;
+        }
+        .pin-box h3 { color: #d4af37; font-size: 16px; text-align: center; margin-bottom: 16px; }
+        .pin-box input {
+            width: 100%; padding: 14px; border-radius: 10px;
+            background: #0a0e1a; color: #fff;
+            border: 2px solid #d4af37; font-size: 20px;
+            text-align: center; letter-spacing: 8px; font-family: monospace;
+        }
+        .pin-actions { display: flex; gap: 10px; margin-top: 16px; }
+        .pin-actions button {
+            flex: 1; padding: 12px; border-radius: 8px; border: none;
+            font-size: 13px; font-weight: 700; text-transform: uppercase; cursor: pointer;
+        }
+        .pin-confirm { background: #10b981; color: #fff; }
+        .pin-cancel { background: #333; color: #fff; }
+        .pin-error { color: #ef4444; font-size: 12px; text-align: center; margin-top: 8px; }
+        .logout-options { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+        .logout-options button {
+            padding: 14px; border-radius: 10px; border: none;
+            font-size: 13px; font-weight: 700; cursor: pointer;
+            text-transform: uppercase; letter-spacing: 1px;
+        }
+        .logout-btn-shift { background: #f59e0b; color: #fff; }
+        .logout-btn-all { background: #ef4444; color: #fff; }
+        .logout-btn-cancel { background: #333; color: #fff; }
+    </style>
+</head>
+<body>
+
+<div class="top-actions">
+    <button onclick="RBGuardShift.openLogoutOptions()">🔓 LOGOUT</button>
+</div>
+
+<div class="shift-screen">
+    <div class="shift-header">
+        <div class="shift-status">● ON DUTY</div>
+        <div class="shift-title">Guard Shift</div>
+        <div class="shift-tenant" id="shiftTenant">Loading...</div>
+    </div>
+
+    <div class="shift-timer-wrap">
+        <div class="shift-timer" id="shiftTimer">00:00:00</div>
+    </div>
+
+    <div class="shift-info-grid">
+        <div class="shift-info-card">
+            <div class="shift-info-label">GPS</div>
+            <div class="shift-info-value green" id="gpsStatus">● Active</div>
+        </div>
+        <div class="shift-info-card">
+            <div class="shift-info-label">Last Ping</div>
+            <div class="shift-info-value" id="lastPing">—</div>
+        </div>
+        <div class="shift-info-card">
+            <div class="shift-info-label">Battery</div>
+            <div class="shift-info-value" id="batteryLevel">—</div>
+        </div>
+        <div class="shift-info-card">
+            <div class="shift-info-label">Pings Sent</div>
+            <div class="shift-info-value" id="pingCount">0</div>
+        </div>
+    </div>
+</div>
+
+<div class="shift-footer">
+    <button onclick="RBGuardShift.requestEndShift()">🛑 END SHIFT</button>
+    <div class="hint">PIN required to end shift</div>
+</div>
+
+<div class="pin-modal" id="pinModal">
+    <div class="pin-box">
+        <h3>Enter PIN to End Shift</h3>
+        <input type="tel" id="pinInput" maxlength="6" placeholder="••••" inputmode="numeric">
+        <div class="pin-error" id="pinError" style="display:none;"></div>
+        <div class="pin-actions">
+            <button class="pin-cancel" onclick="RBGuardShift.cancelEndShift()">Cancel</button>
+            <button class="pin-confirm" onclick="RBGuardShift.confirmEndShift()">Confirm</button>
+        </div>
+    </div>
+</div>
+
+<div class="pin-modal" id="logoutModal">
+    <div class="pin-box">
+        <h3>Logout Options</h3>
+        <p style="color:#8892b0; font-size:12px; text-align:center; margin-bottom:6px;">
+            Choose how you want to end your session
+        </p>
+        <div class="logout-options">
+            <button class="logout-btn-shift" onclick="RBGuardShift.logoutKeepShift()">🔄 Switch User (Keep Shift)</button>
+            <button class="logout-btn-all" onclick="RBGuardShift.logoutEndShift()">🛑 End Shift & Logout</button>
+            <button class="logout-btn-cancel" onclick="RBGuardShift.closeLogoutOptions()">✕ Cancel</button>
+        </div>
+    </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/offline.js"></script>
+<script src="js/permissions.js"></script>
+<script src="js/app.js"></script>
+<script src="js/shift-common.js"></script>
+<script src="js/guard-shift.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    try {
+        RBGuardShift.initShiftScreen();
+    } catch (e) {
+        console.error('initShiftScreen failed:', e);
+    }
+});
+</script>
+
+</body>
+</html>
