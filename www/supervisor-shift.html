@@ -14,14 +14,41 @@
             font-family: -apple-system, "Segoe UI", Arial, sans-serif;
             overflow: hidden;
         }
+
+        /* Top-right actions bar */
+        .top-actions {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            z-index: 20;
+            display: flex;
+            gap: 8px;
+        }
+        .top-actions button {
+            background: rgba(212, 175, 55, 0.15);
+            border: 1px solid #d4af37;
+            color: #d4af37;
+            font-size: 12px;
+            font-weight: 700;
+            padding: 8px 14px;
+            border-radius: 20px;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .top-actions button:active {
+            background: rgba(212, 175, 55, 0.35);
+        }
+
         .shift-screen {
             display: flex;
             flex-direction: column;
             height: 100%;
-            padding: 30px 20px 20px;
+            padding: 60px 20px 20px;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-start;
             position: relative;
+            overflow-y: auto;
         }
         .shift-screen::before {
             content: '';
@@ -37,7 +64,7 @@
         }
         .shift-header {
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 20px;
             position: relative;
             z-index: 2;
         }
@@ -55,7 +82,7 @@
             text-transform: uppercase;
         }
         .shift-title {
-            font-size: 24px;
+            font-size: 22px;
             font-weight: 700;
             color: #fff;
             margin-bottom: 6px;
@@ -65,24 +92,37 @@
             color: #d4af37;
             font-weight: 600;
         }
-        .shift-timer {
-            font-size: 56px;
-            font-weight: 700;
-            font-family: "Courier New", monospace;
-            color: #d4af37;
-            letter-spacing: 3px;
-            margin: 20px 0;
-            text-shadow: 0 0 20px rgba(212, 175, 55, 0.5);
+
+        /* AUTO-SCALING TIMER */
+        .shift-timer-wrap {
+            width: 100%;
+            max-width: 480px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 24px auto;
             position: relative;
             z-index: 2;
         }
+        .shift-timer {
+            font-family: "Courier New", monospace;
+            color: #d4af37;
+            letter-spacing: 4px;
+            font-weight: 700;
+            text-shadow: 0 0 20px rgba(212, 175, 55, 0.5);
+            font-size: 12vw;
+            line-height: 1;
+            white-space: nowrap;
+            text-align: center;
+        }
+
         .shift-info-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 12px;
             width: 100%;
             max-width: 400px;
-            margin-top: 20px;
+            margin-top: 10px;
             position: relative;
             z-index: 2;
         }
@@ -109,11 +149,13 @@
         .shift-info-value.yellow { color: #f59e0b; }
 
         .shift-footer {
-            position: absolute;
-            bottom: 20px;
-            left: 20px;
-            right: 20px;
-            z-index: 3;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 16px 20px 20px;
+            background: linear-gradient(to top, #0a0e1a 70%, transparent);
+            z-index: 10;
         }
         .shift-footer button {
             width: 100%;
@@ -129,13 +171,18 @@
             color: #fff;
             box-shadow: 0 6px 0 #991b1b;
         }
+        .shift-footer button:active {
+            transform: translateY(3px);
+            box-shadow: 0 3px 0 #991b1b;
+        }
         .shift-footer .hint {
             text-align: center;
             color: #8892b0;
             font-size: 11px;
-            margin-top: 12px;
+            margin-top: 10px;
         }
 
+        /* PIN Modal */
         .pin-modal {
             position: fixed;
             inset: 0;
@@ -192,9 +239,35 @@
         .pin-confirm { background: #10b981; color: #fff; }
         .pin-cancel { background: #333; color: #fff; }
         .pin-error { color: #ef4444; font-size: 12px; text-align: center; margin-top: 8px; }
+
+        /* Logout confirmation modal */
+        .logout-options {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 16px;
+        }
+        .logout-options button {
+            padding: 14px;
+            border-radius: 10px;
+            border: none;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .logout-btn-shift { background: #f59e0b; color: #fff; }
+        .logout-btn-all { background: #ef4444; color: #fff; }
+        .logout-btn-cancel { background: #333; color: #fff; }
     </style>
 </head>
 <body>
+
+<!-- Top action bar -->
+<div class="top-actions">
+    <button onclick="RBSupervisor.openLogoutOptions()">🔓 LOGOUT</button>
+</div>
 
 <div class="shift-screen">
 
@@ -204,7 +277,9 @@
         <div class="shift-tenant" id="shiftTenant">Loading...</div>
     </div>
 
-    <div class="shift-timer" id="shiftTimer">00:00:00</div>
+    <div class="shift-timer-wrap">
+        <div class="shift-timer" id="shiftTimer">00:00:00</div>
+    </div>
 
     <div class="shift-info-grid">
         <div class="shift-info-card">
@@ -225,13 +300,14 @@
         </div>
     </div>
 
-    <div class="shift-footer">
-        <button onclick="RBSupervisor.requestEndShift()">🛑 END SHIFT</button>
-        <div class="hint">Long-press top-left corner with PIN to exit</div>
-    </div>
-
 </div>
 
+<div class="shift-footer">
+    <button onclick="RBSupervisor.requestEndShift()">🛑 END SHIFT</button>
+    <div class="hint">PIN required to end shift</div>
+</div>
+
+<!-- PIN modal for end shift -->
 <div class="pin-modal" id="pinModal">
     <div class="pin-box">
         <h3>Enter PIN to End Shift</h3>
@@ -240,6 +316,27 @@
         <div class="pin-actions">
             <button class="pin-cancel" onclick="RBSupervisor.cancelEndShift()">Cancel</button>
             <button class="pin-confirm" onclick="RBSupervisor.confirmEndShift()">Confirm</button>
+        </div>
+    </div>
+</div>
+
+<!-- Logout options modal -->
+<div class="pin-modal" id="logoutModal">
+    <div class="pin-box">
+        <h3>Logout Options</h3>
+        <p style="color:#8892b0; font-size:12px; text-align:center; margin-bottom:6px;">
+            Choose how you want to end your session
+        </p>
+        <div class="logout-options">
+            <button class="logout-btn-shift" onclick="RBSupervisor.logoutKeepShift()">
+                🔄 Switch User (Keep Shift)
+            </button>
+            <button class="logout-btn-all" onclick="RBSupervisor.logoutEndShift()">
+                🛑 End Shift & Logout
+            </button>
+            <button class="logout-btn-cancel" onclick="RBSupervisor.closeLogoutOptions()">
+                ✕ Cancel
+            </button>
         </div>
     </div>
 </div>
