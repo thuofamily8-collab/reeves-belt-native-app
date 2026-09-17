@@ -1,7 +1,7 @@
 /**
  * ============================================================
  * REEVES BELT APP - GUARD SHIFT MODULE
- * Start/end shift + GPS pings
+ * Start/end shift + GPS pings + roll call polling
  * ============================================================
  */
 
@@ -9,7 +9,9 @@ var RBGuardShift = (function() {
 
     var gpsInterval = null;
     var timerInterval = null;
+    var rollCallInterval = null;
     var pingCount = 0;
+    var lastSeenRollCallId = 0;
 
     function init() {
         if (!RBAuth.requireLogin()) return;
@@ -101,6 +103,7 @@ var RBGuardShift = (function() {
         startTimer();
         startGPSPings();
         startBatteryMonitor();
+        startRollCallPolling();
     }
 
     function startTimer() {
@@ -176,6 +179,63 @@ var RBGuardShift = (function() {
     }
 
     // ============================================================
+    // ROLL CALL POLLING
+    // ============================================================
+    function startRollCallPolling() {
+        setTimeout(checkPendingRollCalls, 5000);
+        if (rollCallInterval) clearInterval(rollCallInterval);
+        rollCallInterval = setInterval(checkPendingRollCalls, 30000);
+    }
+
+    function checkPendingRollCalls() {
+        RBApi.getPendingRollCalls().then(function(res) {
+            if (res.count > 0) {
+                var rc = res.roll_calls[0];
+                if (rc.id !== lastSeenRollCallId) {
+                    lastSeenRollCallId = rc.id;
+                    showRollCallModal(rc);
+                }
+            }
+        }).catch(function(err) {
+            console.log('Roll call poll failed:', err);
+        });
+    }
+
+    function showRollCallModal(rc) {
+        if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 200]);
+
+        var overlay = document.getElementById('rollCallOverlay');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'rollCallOverlay';
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px;';
+            document.body.appendChild(overlay);
+        }
+
+        overlay.innerHTML =
+            '<div style="background:#14192e;border-radius:16px;padding:24px;width:100%;max-width:340px;border:2px solid #d4af37;text-align:center;">' +
+                '<div style="font-size:48px;margin-bottom:12px;">📢</div>' +
+                '<div style="color:#d4af37;font-size:16px;font-weight:700;margin-bottom:12px;">ROLL CALL</div>' +
+                '<div style="color:#fff;font-size:15px;font-weight:600;margin-bottom:6px;">' + escapeHtml(rc.supervisor_name) + '</div>' +
+                '<div style="color:#8892b0;font-size:12px;margin-bottom:4px;">Called at ' + formatTime(rc.rolled_at) + '</div>' +
+                '<div style="color:#8892b0;font-size:12px;margin-bottom:20px;">' + (rc.distance_m ? rc.distance_m + ' m away' : '') + '</div>' +
+                '<button onclick="RBGuardShift.ackRollCall(' + rc.id + ')" style="width:100%;padding:14px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:1px;cursor:pointer;box-shadow:0 4px 0 #047857;">✓ ACKNOWLEDGE</button>' +
+            '</div>';
+
+        overlay.style.display = 'flex';
+    }
+
+    function ackRollCall(rollCallId) {
+        RBApi.acknowledgeRollCall(rollCallId).then(function() {
+            if (navigator.vibrate) navigator.vibrate(100);
+            var overlay = document.getElementById('rollCallOverlay');
+            if (overlay) overlay.style.display = 'none';
+        }).catch(function(err) {
+            alert('Failed to acknowledge: ' + (err.error || 'network error'));
+        });
+    }
+
+    // ============================================================
     // END SHIFT
     // ============================================================
     function requestEndShift() {
@@ -207,6 +267,7 @@ var RBGuardShift = (function() {
             RBShift.end();
             if (gpsInterval) { clearInterval(gpsInterval); gpsInterval = null; }
             if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+            if (rollCallInterval) { clearInterval(rollCallInterval); rollCallInterval = null; }
             if (navigator.vibrate) navigator.vibrate(200);
             window.location.href = 'dashboard.html';
         }).catch(function() {
@@ -215,9 +276,6 @@ var RBGuardShift = (function() {
         });
     }
 
-    // ============================================================
-    // LOGOUT OPTIONS
-    // ============================================================
     function openLogoutOptions() {
         var modal = document.getElementById('logoutModal');
         if (modal) modal.classList.add('show');
@@ -233,6 +291,7 @@ var RBGuardShift = (function() {
         RBAuth.clearSession();
         if (gpsInterval) { clearInterval(gpsInterval); gpsInterval = null; }
         if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+        if (rollCallInterval) { clearInterval(rollCallInterval); rollCallInterval = null; }
         window.location.href = 'login.html';
     }
 
@@ -253,6 +312,22 @@ var RBGuardShift = (function() {
                String(d.getSeconds()).padStart(2, '0');
     }
 
+    function formatTime(isoStr) {
+        try {
+            var d = new Date(isoStr.replace(' ', 'T'));
+            return String(d.getHours()).padStart(2, '0') + ':' +
+                   String(d.getMinutes()).padStart(2, '0') + ':' +
+                   String(d.getSeconds()).padStart(2, '0');
+        } catch (e) { return isoStr; }
+    }
+
+    function escapeHtml(s) {
+        if (!s) return '';
+        var d = document.createElement('div');
+        d.textContent = s;
+        return d.innerHTML;
+    }
+
     return {
         init: init,
         startShift: startShift,
@@ -263,6 +338,7 @@ var RBGuardShift = (function() {
         openLogoutOptions: openLogoutOptions,
         closeLogoutOptions: closeLogoutOptions,
         logoutKeepShift: logoutKeepShift,
-        logoutEndShift: logoutEndShift
+        logoutEndShift: logoutEndShift,
+        ackRollCall: ackRollCall
     };
 })();
