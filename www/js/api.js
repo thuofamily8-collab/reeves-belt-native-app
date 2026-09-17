@@ -9,6 +9,7 @@
  *  - Detailed console logging
  *  - Improved error handling with HTTP status
  *  - Unified staff shift endpoints (guards + supervisors)
+ *  - Roll call endpoints
  * ============================================================
  */
 
@@ -248,6 +249,30 @@ var RBApi = (function() {
             var endpoint = '/supervisor/dashboard-12hr.php';
             if (tenantId) endpoint += '?tenant_id=' + encodeURIComponent(tenantId);
             return request(endpoint, 'GET');
+        },
+
+        // ===== ROLL CALL =====
+        getNearbyGuards: function(lat, lng, tenantId) {
+            var endpoint = '/supervisor/nearby-guards.php?lat=' + encodeURIComponent(lat) + '&lng=' + encodeURIComponent(lng);
+            if (tenantId) endpoint += '&tenant_id=' + encodeURIComponent(tenantId);
+            return request(endpoint, 'GET');
+        },
+        getRollCallsList: function(params) {
+            params = params || {};
+            var qs = [];
+            if (params.tenant_id) qs.push('tenant_id=' + encodeURIComponent(params.tenant_id));
+            if (params.guard_id) qs.push('guard_id=' + encodeURIComponent(params.guard_id));
+            if (params.supervisor_id) qs.push('supervisor_id=' + encodeURIComponent(params.supervisor_id));
+            if (params.limit) qs.push('limit=' + encodeURIComponent(params.limit));
+            var endpoint = '/supervisor/roll-calls-list.php';
+            if (qs.length) endpoint += '?' + qs.join('&');
+            return request(endpoint, 'GET');
+        },
+        getPendingRollCalls: function() {
+            return request('/staff/pending-roll-calls.php', 'GET');
+        },
+        acknowledgeRollCall: function(rollCallId) {
+            return request('/staff/acknowledge-roll-call.php', 'POST', { roll_call_id: rollCallId });
         },
 
         // ===== DASHBOARD =====
