@@ -4,11 +4,11 @@
  * QR scanning, checkpoint tracking, offline sync
  *
  * UPDATED:
- *  - Dual-pass decode: full frame + cropped center
- *  - Fast path: dontInvert first, then attemptBoth
+ *  - Runtime camera permission
+ *  - 3-pass QR decode (fast → full → attemptBoth)
  *  - Faster scan interval (100ms)
  *  - Continuous autofocus hint
- *  - Immediate vibrate on detection
+ *  - Shift check: guards must be on duty to scan
  * ============================================================
  */
 
@@ -67,7 +67,7 @@ function loadCheckpoints() {
 }
 
 // ============================================================
-// LOCAL STORAGE OF SCANNED CHECKPOINTS (per day)
+// LOCAL STORAGE (per day)
 // ============================================================
 function todayKey() {
     var d = new Date();
@@ -160,9 +160,38 @@ function updateProgress() {
 }
 
 // ============================================================
+// SHIFT CHECK HELPER
+// ============================================================
+function requireShiftOrPrompt(action) {
+    if (typeof RBShift === 'undefined') return true;  // shift-common not loaded → allow
+    if (typeof RBAuth === 'undefined') return true;
+
+    var role = RBAuth.getRole ? RBAuth.getRole() : '';
+
+    // Supervisors are always allowed (they may be just viewing)
+    if (role === 'supervisor') return true;
+
+    // Guards must be on duty
+    if (role === 'guard' && !RBShift.isActive()) {
+        if (confirm('You must START DUTY before ' + action + '.\n\nStart shift now?')) {
+            if (typeof RBGuardShift !== 'undefined' && RBGuardShift.startShift) {
+                RBGuardShift.startShift();
+            } else {
+                window.location.href = 'dashboard.html';
+            }
+        }
+        return false;
+    }
+
+    return true;
+}
+
+// ============================================================
 // QR SCANNER
 // ============================================================
 function startScanner() {
+    if (!requireShiftOrPrompt('scanning checkpoints')) return;
+
     if (typeof RBPermissions !== 'undefined') {
         RBPermissions.requestCamera().then(function(granted) {
             if (!granted) {
@@ -193,7 +222,6 @@ function actuallyStartScanner() {
         return;
     }
 
-    // Camera constraints — request high res + autofocus hint
     var constraints = {
         audio: false,
         video: {
@@ -218,7 +246,6 @@ function actuallyStartScanner() {
         startBtn.disabled = true;
         stopBtn.disabled = false;
 
-        // Apply continuous autofocus if supported
         try {
             var track = stream.getVideoTracks()[0];
             var capabilities = track.getCapabilities ? track.getCapabilities() : {};
@@ -226,17 +253,12 @@ function actuallyStartScanner() {
             if (capabilities.focusMode && capabilities.focusMode.indexOf('continuous') >= 0) {
                 advanced.push({ focusMode: 'continuous' });
             }
-            if (advanced.length > 0) {
-                track.applyConstraints({ advanced: advanced });
-            }
-        } catch (e) {
-            console.log('Autofocus hint failed:', e);
-        }
+            if (advanced.length > 0) track.applyConstraints({ advanced: advanced });
+        } catch (e) { console.log('Autofocus hint failed:', e); }
 
         video.onloadedmetadata = function() {
             video.play().catch(function() {});
             setTimeout(function() {
-                // Faster scan — 100ms
                 qrScanInterval = setInterval(scanQRFrame, 100);
             }, 400);
         };
@@ -252,98 +274,70 @@ function scanQRFrame() {
     if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
     if (video.videoWidth === 0 || video.videoHeight === 0) return;
 
-    // Draw full frame
     scanCanvas.width = video.videoWidth;
     scanCanvas.height = video.videoHeight;
     scanCanvasContext.drawImage(video, 0, 0, scanCanvas.width, scanCanvas.height);
 
     var code = null;
 
-    // ---------- PASS 1: cropped center, dontInvert (fast) ----------
+    // Pass 1: cropped + dontInvert
     try {
         var cropW = Math.floor(scanCanvas.width * 0.7);
         var cropH = Math.floor(scanCanvas.height * 0.7);
         var cropX = Math.floor((scanCanvas.width - cropW) / 2);
         var cropY = Math.floor((scanCanvas.height - cropH) / 2);
-
         var imageData = scanCanvasContext.getImageData(cropX, cropY, cropW, cropH);
+        code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' });
+    } catch (e) { console.log('Pass 1 error:', e); }
 
-        code = jsQR(imageData.data, imageData.width, imageData.height, {
-            inversionAttempts: 'dontInvert'
-        });
-    } catch (e) {
-        console.log('Pass 1 error:', e);
-    }
-
-    // ---------- PASS 2: full frame, dontInvert ----------
+    // Pass 2: full frame + dontInvert
     if (!code) {
         try {
             var fullData = scanCanvasContext.getImageData(0, 0, scanCanvas.width, scanCanvas.height);
-            code = jsQR(fullData.data, fullData.width, fullData.height, {
-                inversionAttempts: 'dontInvert'
-            });
-        } catch (e) {
-            console.log('Pass 2 error:', e);
-        }
+            code = jsQR(fullData.data, fullData.width, fullData.height, { inversionAttempts: 'dontInvert' });
+        } catch (e) { console.log('Pass 2 error:', e); }
     }
 
-    // ---------- PASS 3: cropped, attemptBoth (slow fallback) ----------
+    // Pass 3: cropped + attemptBoth
     if (!code) {
         try {
             var cropW2 = Math.floor(scanCanvas.width * 0.7);
             var cropH2 = Math.floor(scanCanvas.height * 0.7);
             var cropX2 = Math.floor((scanCanvas.width - cropW2) / 2);
             var cropY2 = Math.floor((scanCanvas.height - cropH2) / 2);
-
             var imageData2 = scanCanvasContext.getImageData(cropX2, cropY2, cropW2, cropH2);
-
-            code = jsQR(imageData2.data, imageData2.width, imageData2.height, {
-                inversionAttempts: 'attemptBoth'
-            });
-        } catch (e) {
-            console.log('Pass 3 error:', e);
-        }
+            code = jsQR(imageData2.data, imageData2.width, imageData2.height, { inversionAttempts: 'attemptBoth' });
+        } catch (e) { console.log('Pass 3 error:', e); }
     }
 
-    if (code && code.data) {
-        handleQRDetected(code.data);
-    }
+    if (code && code.data) handleQRDetected(code.data);
 }
 
 function handleQRDetected(qrData) {
-    // Debounce — prevent same code from firing twice within 2 seconds
     var now = Date.now();
-    if (qrData === lastDetectedCode && (now - lastDetectedAt) < 2000) {
-        return;
-    }
+    if (qrData === lastDetectedCode && (now - lastDetectedAt) < 2000) return;
     lastDetectedCode = qrData;
     lastDetectedAt = now;
 
     stopScanner();
-
-    // Immediate feedback
     if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
     playBeep();
 
     var matchedCheckpoint = matchCheckpoint(qrData);
-
     var resultBox = document.getElementById('scanResult');
     if (resultBox) resultBox.style.display = 'block';
 
     if (matchedCheckpoint) {
         var successText = document.getElementById('scanSuccessText');
         if (successText) successText.textContent = '✓ ' + matchedCheckpoint.point_name + ' - Logging...';
-
         setTimeout(function() {
             submitPatrolScan(matchedCheckpoint.point_name, qrData);
         }, 300);
     } else {
         var successText2 = document.getElementById('scanSuccessText');
         if (successText2) successText2.textContent = '⚠ QR not recognized: ' + qrData;
-
         var successBox = document.getElementById('scanSuccess');
         if (successBox) successBox.style.background = 'rgba(245, 158, 11, 0.2)';
-
         showToast('QR code not recognized', 'warning');
     }
 }
@@ -351,9 +345,7 @@ function handleQRDetected(qrData) {
 function matchCheckpoint(qrData) {
     for (var i = 0; i < checkpoints.length; i++) {
         var cp = checkpoints[i];
-        if (cp.point_name === qrData ||
-            cp.qr_code === qrData ||
-            String(cp.id) === String(qrData)) {
+        if (cp.point_name === qrData || cp.qr_code === qrData || String(cp.id) === String(qrData)) {
             return cp;
         }
     }
@@ -361,22 +353,16 @@ function matchCheckpoint(qrData) {
 }
 
 function stopScanner() {
-    if (qrScanInterval) {
-        clearInterval(qrScanInterval);
-        qrScanInterval = null;
-    }
-
+    if (qrScanInterval) { clearInterval(qrScanInterval); qrScanInterval = null; }
     if (qrStream) {
         qrStream.getTracks().forEach(function(t) { t.stop(); });
         qrStream = null;
     }
-
     var video = document.getElementById('qrVideo');
     var placeholder = document.getElementById('scannerPlaceholder');
     var frame = document.getElementById('scannerFrame');
     var startBtn = document.getElementById('startScanBtn');
     var stopBtn = document.getElementById('stopScanBtn');
-
     if (video) video.style.display = 'none';
     if (placeholder) placeholder.style.display = 'block';
     if (frame) frame.style.display = 'none';
@@ -403,27 +389,22 @@ function submitPatrolScan(checkpointName, qrData) {
         OfflineSync.queueRecord('patrol_scan', data);
     }
 
-    RBApi.logPatrolScan(data).then(function(result) {
+    RBApi.logPatrolScan(data).then(function() {
         hideLoading();
-
         if (scannedCheckpoints.indexOf(checkpointName) === -1) {
             scannedCheckpoints.push(checkpointName);
             saveLocalScannedCheckpoints();
         }
-
         renderCheckpoints();
         renderManualSelect();
         updateProgress();
-
         setTimeout(function() {
             var box = document.getElementById('scanResult');
             if (box) box.style.display = 'none';
         }, 3000);
-
         showToast('✓ ' + checkpointName + ' logged', 'success');
     }).catch(function(err) {
         hideLoading();
-
         if (typeof OfflineSync !== 'undefined' && OfflineSync.queueRecord) {
             if (scannedCheckpoints.indexOf(checkpointName) === -1) {
                 scannedCheckpoints.push(checkpointName);
@@ -440,14 +421,13 @@ function submitPatrolScan(checkpointName, qrData) {
 }
 
 function submitManualScan() {
+    if (!requireShiftOrPrompt('logging checkpoints')) return;
+
     var select = document.getElementById('manualCheckpoint');
     if (!select) return;
 
     var checkpointName = select.value;
-    if (!checkpointName) {
-        showToast('Select a checkpoint', 'error');
-        return;
-    }
+    if (!checkpointName) { showToast('Select a checkpoint', 'error'); return; }
 
     var qrData = checkpointName;
     for (var i = 0; i < checkpoints.length; i++) {
