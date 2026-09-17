@@ -11,12 +11,10 @@ var RBSupervisor = (function() {
     var SHIFT_START_KEY = 'rb_shift_started';
     var SHIFT_TENANT_KEY = 'rb_shift_tenant_id';
     var SUPER_TENANT_KEY = 'rb_supervisor_tenant_id';
-    var EXIT_PIN = '2244';
 
     var gpsInterval = null;
     var timerInterval = null;
     var pingCount = 0;
-    var lastLocation = null;
 
     // ============================================================
     // TENANT MANAGEMENT
@@ -53,14 +51,18 @@ var RBSupervisor = (function() {
             return;
         }
 
-        document.getElementById('supGreeting').textContent =
-            'Welcome back, ' + (user.full_name || 'Supervisor');
+        var greetEl = document.getElementById('supGreeting');
+        if (greetEl) greetEl.textContent = 'Welcome back, ' + (user.full_name || 'Supervisor');
 
         loadSupervisorTenants();
         updateShiftButton();
 
         setInterval(loadDashboardData, 30000);
-        setTimeout(loadDashboardData, 500);
+        setInterval(loadOnDuty, 30000);
+        setTimeout(function() {
+            loadDashboardData();
+            loadOnDuty();
+        }, 500);
     }
 
     function loadSupervisorTenants() {
@@ -104,6 +106,47 @@ var RBSupervisor = (function() {
                 guardsList.innerHTML = '<div class="empty-state-sup">Failed to load. Check connection.</div>';
             }
         });
+    }
+
+    function loadOnDuty() {
+        var list = document.getElementById('onDutyList');
+        if (!list) return;
+
+        var tenantId = getCurrentTenantId();
+
+        RBApi.getStaffOnDuty(tenantId)
+            .then(function(res) {
+                var staff = (res && res.staff) ? res.staff : [];
+                if (staff.length === 0) {
+                    list.innerHTML = '<div class="empty-state-sup">No one on duty right now</div>';
+                    return;
+                }
+                var html = '';
+                staff.forEach(function(s) {
+                    var elapsed = s.elapsed_seconds ? formatElapsed(s.elapsed_seconds) : '00:00:00';
+                    html +=
+                        '<div class="guard-item active">' +
+                            '<div>' +
+                                '<div class="guard-info-name">' + escapeHtml(s.full_name) + '</div>' +
+                                '<div class="guard-info-sub">' + escapeHtml(s.role) + ' · on duty ' + elapsed + '</div>' +
+                            '</div>' +
+                            '<div class="guard-status-badge active">● LIVE</div>' +
+                        '</div>';
+                });
+                list.innerHTML = html;
+            })
+            .catch(function(err) {
+                console.log('loadOnDuty failed:', err);
+                list.innerHTML = '<div class="empty-state-sup">Unable to load</div>';
+            });
+    }
+
+    function formatElapsed(sec) {
+        var h = Math.floor(sec / 3600);
+        var m = Math.floor((sec % 3600) / 60);
+        var s = sec % 60;
+        function p(n) { return n < 10 ? '0' + n : n; }
+        return p(h) + ':' + p(m) + ':' + p(s);
     }
 
     function renderGuards(guards) {
@@ -165,21 +208,12 @@ var RBSupervisor = (function() {
     }
 
     // ============================================================
-    // SHIFT MANAGEMENT
+    // SHIFT MANAGEMENT (uses shift-common.js RBShift)
     // ============================================================
-    function isShiftActive() {
-        return localStorage.getItem(SHIFT_KEY) === '1';
-    }
-
-    function getShiftStartedAt() {
-        var t = localStorage.getItem(SHIFT_START_KEY);
-        return t ? parseInt(t, 10) : 0;
-    }
-
     function updateShiftButton() {
         var btn = document.getElementById('shiftToggleBtn');
         if (!btn) return;
-        if (isShiftActive()) {
+        if (typeof RBShift !== 'undefined' && RBShift.isActive()) {
             btn.textContent = '👁️ VIEW ACTIVE SHIFT';
             btn.classList.add('on-shift');
         } else {
@@ -189,9 +223,8 @@ var RBSupervisor = (function() {
     }
 
     function toggleShift() {
-        console.log('[Supervisor] toggleShift tapped. Active:', isShiftActive());
         try {
-            if (isShiftActive()) {
+            if (typeof RBShift !== 'undefined' && RBShift.isActive()) {
                 window.location.href = 'supervisor-shift.html';
             } else {
                 startShift();
@@ -204,17 +237,11 @@ var RBSupervisor = (function() {
 
     function startShift() {
         var permissionPromise;
-
         if (typeof RBPermissions !== 'undefined' && typeof RBPermissions.requestLocation === 'function') {
-            console.log('[Supervisor] Using RBPermissions helper');
             permissionPromise = RBPermissions.requestLocation();
         } else {
-            console.log('[Supervisor] RBPermissions not loaded — falling back to navigator.geolocation');
             permissionPromise = new Promise(function(resolve) {
-                if (!navigator.geolocation) {
-                    resolve(false);
-                    return;
-                }
+                if (!navigator.geolocation) { resolve(false); return; }
                 navigator.geolocation.getCurrentPosition(
                     function() { resolve(true); },
                     function() { resolve(false); },
@@ -229,18 +256,39 @@ var RBSupervisor = (function() {
                 return;
             }
 
-            var now = Date.now();
-            localStorage.setItem(SHIFT_KEY, '1');
-            localStorage.setItem(SHIFT_START_KEY, String(now));
-            localStorage.setItem(SHIFT_TENANT_KEY, getCurrentTenantId());
+            navigator.geolocation.getCurrentPosition(function(pos) {
+                var payload = {
+                    latitude: pos.coords.latitude,
+                    longitude: pos.coords.longitude,
+                    device_info: navigator.userAgent.substring(0, 200)
+                };
 
-            RBApi.startSupervisorShift().catch(function(err) {
-                console.log('Server shift-start log failed:', err);
-            });
+                RBApi.startStaffShift(payload).then(function(res) {
+                    if (typeof RBShift !== 'undefined') {
+                        RBShift.start('supervisor', res.tenant_id, res.session_id, Date.now());
+                    } else {
+                        localStorage.setItem(SHIFT_KEY, '1');
+                        localStorage.setItem(SHIFT_START_KEY, String(Date.now()));
+                        localStorage.setItem(SHIFT_TENANT_KEY, String(res.tenant_id));
+                    }
 
-            if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-
-            window.location.href = 'supervisor-shift.html';
+                    if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+                    window.location.href = 'supervisor-shift.html';
+                }).catch(function(err) {
+                    alert('Failed to start shift: ' + (err.error || 'network error'));
+                });
+            }, function() {
+                RBApi.startStaffShift({ device_info: navigator.userAgent.substring(0, 200) })
+                    .then(function(res) {
+                        if (typeof RBShift !== 'undefined') {
+                            RBShift.start('supervisor', res.tenant_id, res.session_id, Date.now());
+                        }
+                        window.location.href = 'supervisor-shift.html';
+                    })
+                    .catch(function(err) {
+                        alert('Failed: ' + (err.error || 'network error'));
+                    });
+            }, { enableHighAccuracy: true, timeout: 10000 });
         }).catch(function(err) {
             console.error('[Supervisor] Permission error:', err);
             alert('Could not start shift: ' + err.message);
@@ -248,17 +296,16 @@ var RBSupervisor = (function() {
     }
 
     // ============================================================
-    // SHIFT SCREEN
+    // SHIFT SCREEN (supervisor-shift.html)
     // ============================================================
     function initShiftScreen() {
         if (!RBAuth.requireLogin()) return;
 
-        if (!isShiftActive()) {
+        if (typeof RBShift === 'undefined' || !RBShift.isActive()) {
             window.location.href = 'supervisor.html';
             return;
         }
 
-        // Load tenant name — try cache first, then fetch
         resolveTenantName();
 
         startTimer();
@@ -267,9 +314,8 @@ var RBSupervisor = (function() {
     }
 
     function resolveTenantName() {
-        var activeTenantId = localStorage.getItem(SHIFT_TENANT_KEY) || getCurrentTenantId();
+        var activeTenantId = (typeof RBShift !== 'undefined') ? RBShift.getTenantId() : getCurrentTenantId();
 
-        // Try local cache
         var tenants = getSupervisorTenants();
         var tenantName = null;
         tenants.forEach(function(t) {
@@ -281,7 +327,6 @@ var RBSupervisor = (function() {
             return;
         }
 
-        // Fetch from server
         RBApi.getSupervisorDashboard(activeTenantId).then(function(res) {
             var fetchedTenants = (res && res.tenants) ? res.tenants : [];
             localStorage.setItem('rb_supervisor_tenants', JSON.stringify(fetchedTenants));
@@ -292,8 +337,7 @@ var RBSupervisor = (function() {
             });
 
             setTenantName(found || 'Unknown Tenant');
-        }).catch(function(err) {
-            console.log('Tenant fetch failed:', err);
+        }).catch(function() {
             setTenantName('Unknown Tenant');
         });
     }
@@ -312,17 +356,9 @@ var RBSupervisor = (function() {
     function updateTimerDisplay() {
         var el = document.getElementById('shiftTimer');
         if (!el) return;
-        var start = getShiftStartedAt();
-        if (!start) { el.textContent = '00:00:00'; return; }
-
-        var elapsed = Math.floor((Date.now() - start) / 1000);
-        var h = Math.floor(elapsed / 3600);
-        var m = Math.floor((elapsed % 3600) / 60);
-        var s = elapsed % 60;
-        el.textContent = pad(h) + ':' + pad(m) + ':' + pad(s);
+        if (typeof RBShift === 'undefined') { el.textContent = '00:00:00'; return; }
+        el.textContent = RBShift.formatElapsed(RBShift.getElapsedSeconds());
     }
-
-    function pad(n) { return n < 10 ? '0' + n : String(n); }
 
     function startGPSPings() {
         sendLocationPing();
@@ -348,9 +384,7 @@ var RBSupervisor = (function() {
                 battery_pct: getBatteryPct()
             };
 
-            lastLocation = payload;
-
-            RBApi.sendSupervisorLocation(payload).then(function() {
+            RBApi.sendStaffLocation(payload).then(function() {
                 pingCount++;
                 var el = document.getElementById('pingCount');
                 if (el) el.textContent = pingCount;
@@ -362,11 +396,7 @@ var RBSupervisor = (function() {
             });
         }, function(err) {
             setGPSStatus('red', '● ' + (err.message || 'Denied'));
-        }, {
-            enableHighAccuracy: true,
-            timeout: 20000,
-            maximumAge: 0
-        });
+        }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
     }
 
     function setGPSStatus(color, text) {
@@ -413,34 +443,26 @@ var RBSupervisor = (function() {
         var errEl = document.getElementById('pinError');
         var pin = input ? input.value.trim() : '';
 
-        if (pin !== EXIT_PIN) {
-            if (errEl) {
-                errEl.textContent = 'Incorrect PIN';
-                errEl.style.display = 'block';
-            }
+        if (pin !== '2244') {
+            if (errEl) { errEl.textContent = 'Incorrect PIN'; errEl.style.display = 'block'; }
             if (navigator.vibrate) navigator.vibrate([50, 50, 50]);
             return;
         }
 
-        endShift();
-    }
-
-    function endShift() {
-        localStorage.removeItem(SHIFT_KEY);
-        localStorage.removeItem(SHIFT_START_KEY);
-        localStorage.removeItem(SHIFT_TENANT_KEY);
-        if (gpsInterval) { clearInterval(gpsInterval); gpsInterval = null; }
-        if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
-
-        RBApi.endSupervisorShift().catch(function() {});
-
-        if (navigator.vibrate) navigator.vibrate(200);
-
-        window.location.href = 'supervisor.html';
+        RBApi.endStaffShift({ reason: 'manual' }).then(function() {
+            if (typeof RBShift !== 'undefined') RBShift.end();
+            if (gpsInterval) { clearInterval(gpsInterval); gpsInterval = null; }
+            if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+            if (navigator.vibrate) navigator.vibrate(200);
+            window.location.href = 'supervisor.html';
+        }).catch(function() {
+            if (typeof RBShift !== 'undefined') RBShift.end();
+            window.location.href = 'supervisor.html';
+        });
     }
 
     // ============================================================
-    // LOGOUT OPTIONS
+    // LOGOUT OPTIONS (shift screen)
     // ============================================================
     function openLogoutOptions() {
         var modal = document.getElementById('logoutModal');
@@ -452,47 +474,21 @@ var RBSupervisor = (function() {
         if (modal) modal.classList.remove('show');
     }
 
-    /**
-     * Ends the current user's session (clears their login token),
-     * but keeps the shift active on the device.
-     * Use case: supervisor A starts shift → hands phone to supervisor B mid-shift.
-     */
     function logoutKeepShift() {
         if (!confirm('Switch user? The active shift will continue running.')) return;
-
-        // Clear only the user session, not the shift
         RBAuth.clearSession();
-
-        // Stop pings temporarily — new user will restart them
         if (gpsInterval) { clearInterval(gpsInterval); gpsInterval = null; }
         if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
-
         window.location.href = 'login.html';
     }
 
-    /**
-     * Ends the shift AND logs out.
-     * Use case: end of the day, supervisor goes home.
-     */
     function logoutEndShift() {
         if (!confirm('End shift AND logout? You will need to log in again.')) return;
-
-        // Clear the shift entirely
-        localStorage.removeItem(SHIFT_KEY);
-        localStorage.removeItem(SHIFT_START_KEY);
-        localStorage.removeItem(SHIFT_TENANT_KEY);
-        localStorage.removeItem(SUPER_TENANT_KEY);
-
+        RBApi.endStaffShift({ reason: 'logout' }).catch(function() {});
+        if (typeof RBShift !== 'undefined') RBShift.end();
         if (gpsInterval) { clearInterval(gpsInterval); gpsInterval = null; }
         if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
-
-        // Notify server
-        RBApi.endSupervisorShift().catch(function() {});
-
-        // Logout
-        RBApi.logout().then(function() {
-        }).catch(function() {
-        }).then(function() {
+        RBApi.logout().then(function() {}).catch(function() {}).then(function() {
             RBAuth.clearSession();
             window.location.href = 'login.html';
         });
@@ -520,7 +516,8 @@ var RBSupervisor = (function() {
 
     function formatNow() {
         var d = new Date();
-        return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+        function p(n) { return n < 10 ? '0' + n : n; }
+        return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
     }
 
     return {
@@ -528,6 +525,7 @@ var RBSupervisor = (function() {
         initShiftScreen: initShiftScreen,
         changeTenant: changeTenant,
         toggleShift: toggleShift,
+        loadOnDuty: loadOnDuty,
         requestEndShift: requestEndShift,
         cancelEndShift: cancelEndShift,
         confirmEndShift: confirmEndShift,
