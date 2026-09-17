@@ -6,21 +6,19 @@
  *
  * UPDATED:
  *  - Sends both Authorization and X-Auth-Token headers
- *    to survive proxy stripping on shared hosting.
- *  - Detailed console logging for every request.
- *  - Improved error messages showing HTTP status + raw body.
- *  - Handles HTTP 0 (CORS / network / timeout) explicitly.
- *  - Supervisor dashboard + shift + location endpoints.
+ *  - Detailed console logging
+ *  - Improved error handling with HTTP status
+ *  - Unified staff shift endpoints (guards + supervisors)
  * ============================================================
  */
 
 var RBApi = (function() {
 
     var BASE_URL = 'https://www.pajhub.co.ke/api/v1';
-    var DEBUG = true;  // set to false for production
+    var DEBUG = true;
 
     // ============================================================
-    // STORAGE HELPERS (Capacitor Preferences or localStorage)
+    // STORAGE HELPERS
     // ============================================================
     function storageGet(key) {
         return new Promise(function(resolve) {
@@ -83,9 +81,6 @@ var RBApi = (function() {
         storageRemove('rb_token');
     }
 
-    // ============================================================
-    // DEBUG LOGGER
-    // ============================================================
     function log() {
         if (!DEBUG) return;
         var args = Array.prototype.slice.call(arguments);
@@ -94,7 +89,7 @@ var RBApi = (function() {
     }
 
     // ============================================================
-    // CORE REQUEST FUNCTION
+    // CORE REQUEST
     // ============================================================
     function request(endpoint, method, data) {
         method = method || 'GET';
@@ -122,9 +117,7 @@ var RBApi = (function() {
                 if (xhr.readyState !== 4) return;
 
                 log('RESPONSE ' + method + ' ' + url + ' | status=' + xhr.status + ' | len=' + (xhr.responseText ? xhr.responseText.length : 0));
-                log('BODY (first 400):', xhr.responseText ? xhr.responseText.substring(0, 400) : '(empty)');
 
-                // HTTP 0 = network/CORS block/timeout
                 if (xhr.status === 0) {
                     reject({
                         success: false,
@@ -197,8 +190,6 @@ var RBApi = (function() {
         getToken: getToken,
         setToken: setToken,
         clearToken: clearToken,
-
-        // Base URL (read-only, useful for debugging)
         getBaseUrl: function() { return BASE_URL; },
 
         // ===== AUTH =====
@@ -212,61 +203,44 @@ var RBApi = (function() {
                 device_platform: deviceInfo.device_platform || 'android'
             });
         },
-
-        verify: function() {
-            return request('/auth/verify.php', 'GET');
-        },
-
-        logout: function() {
-            return request('/auth/logout.php', 'POST');
-        },
+        verify: function() { return request('/auth/verify.php', 'GET'); },
+        logout: function() { return request('/auth/logout.php', 'POST'); },
 
         // ===== DETECTIONS =====
-        getPendingDetections: function() {
-            return request('/detection/pending.php', 'GET');
-        },
+        getPendingDetections: function() { return request('/detection/pending.php', 'GET'); },
 
         // ===== CAMERA =====
-        getCameraStatus: function() {
-            return request('/camera/status.php', 'GET');
-        },
+        getCameraStatus: function() { return request('/camera/status.php', 'GET'); },
 
         // ===== VEHICLE =====
-        authorizeVehicle: function(data) {
-            return request('/vehicle/authorize.php', 'POST', data);
-        },
-
-        processVehicleExit: function(logId, exitWeight) {
+        authorizeVehicle: function(data) { return request('/vehicle/authorize.php', 'POST', data); },
+        processVehicleExit: function(logId, exitWeight, exitComment) {
             return request('/vehicle/exit.php', 'POST', {
                 log_id: logId,
-                exit_weight: exitWeight
+                exit_weight: exitWeight,
+                exit_comment: exitComment || ''
             });
         },
-
-        getVehiclesInside: function() {
-            return request('/vehicle/list-inside.php', 'GET');
-        },
+        getVehiclesInside: function() { return request('/vehicle/list-inside.php', 'GET'); },
 
         // ===== VISITOR =====
-        checkInVisitor: function(data) {
-            return request('/visitor/checkin.php', 'POST', data);
-        },
-
-        checkOutVisitor: function(logId) {
-            return request('/visitor/checkout.php', 'POST', { log_id: logId });
-        },
-
-        getVisitorsInside: function() {
-            return request('/visitor/list-inside.php', 'GET');
-        },
+        checkInVisitor: function(data) { return request('/visitor/checkin.php', 'POST', data); },
+        checkOutVisitor: function(logId) { return request('/visitor/checkout.php', 'POST', { log_id: logId }); },
+        getVisitorsInside: function() { return request('/visitor/list-inside.php', 'GET'); },
 
         // ===== PATROL =====
-        getPatrolPoints: function() {
-            return request('/patrol/points.php', 'GET');
-        },
+        getPatrolPoints: function() { return request('/patrol/points.php', 'GET'); },
+        logPatrolScan: function(data) { return request('/patrol/scan.php', 'POST', data); },
 
-        logPatrolScan: function(data) {
-            return request('/patrol/scan.php', 'POST', data);
+        // ===== STAFF SHIFT (unified guard + supervisor) =====
+        startStaffShift: function(data) { return request('/staff/shift-start.php', 'POST', data || {}); },
+        endStaffShift: function(data) { return request('/staff/shift-end.php', 'POST', data || {}); },
+        sendStaffLocation: function(data) { return request('/staff/location.php', 'POST', data); },
+        getStaffActive: function() { return request('/staff/active.php', 'GET'); },
+        getStaffOnDuty: function(tenantId) {
+            var endpoint = '/staff/on-duty-list.php';
+            if (tenantId) endpoint += '?tenant_id=' + encodeURIComponent(tenantId);
+            return request(endpoint, 'GET');
         },
 
         // ===== SUPERVISOR =====
@@ -276,28 +250,12 @@ var RBApi = (function() {
             return request(endpoint, 'GET');
         },
 
-        startSupervisorShift: function() {
-            return request('/supervisor/shift-start.php', 'POST', {});
-        },
-
-        endSupervisorShift: function() {
-            return request('/supervisor/shift-end.php', 'POST', {});
-        },
-
-        sendSupervisorLocation: function(data) {
-            return request('/supervisor/location.php', 'POST', data);
-        },
-
         // ===== DASHBOARD =====
-        getDashboardStats: function() {
-            return request('/dashboard/stats.php', 'GET');
-        },
+        getDashboardStats: function() { return request('/dashboard/stats.php', 'GET'); },
 
         // ===== DETECT (SIMULATE CAMERA) =====
         triggerDetection: function(type) {
-            return request('/camera/detect.php', 'POST', {
-                type: type || 'vehicle'
-            });
+            return request('/camera/detect.php', 'POST', { type: type || 'vehicle' });
         }
     };
 })();
