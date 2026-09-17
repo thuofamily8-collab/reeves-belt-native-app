@@ -17,6 +17,9 @@
             <div class="form-header-title">🚛 Vehicle Entry</div>
         </div>
 
+        <!-- SHIFT BANNER -->
+        <div id="rbDutyBanner" style="display:none;"></div>
+
         <form id="vehicleForm">
 
             <div class="form-card">
@@ -58,7 +61,6 @@
                             <option value="Car">Car</option>
                         </select>
                     </div>
-
                     <div class="field">
                         <label class="field-label">Color</label>
                         <input type="text" id="vehicleColor" class="field-input" placeholder="e.g., White">
@@ -69,7 +71,6 @@
                     <label class="field-label">Vehicle Model</label>
                     <input type="text" id="vehicleModel" class="field-input" placeholder="e.g., Isuzu FRR">
                 </div>
-
             </div>
 
             <div class="form-card">
@@ -85,13 +86,11 @@
                         <label class="field-label">ID Number *</label>
                         <input type="text" id="driverId" class="field-input" placeholder="National ID" required>
                     </div>
-
                     <div class="field">
                         <label class="field-label">Phone *</label>
                         <input type="tel" id="driverPhone" class="field-input" placeholder="0712345678" required>
                     </div>
                 </div>
-
             </div>
 
             <div class="form-card">
@@ -126,7 +125,6 @@
                         💬 Optional: notes about what's being delivered / collected
                     </div>
                 </div>
-
             </div>
 
             <div class="info-banner green">
@@ -153,6 +151,13 @@
     <script src="js/api.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/offline.js"></script>
+    <script src="js/permissions.js"></script>
+    <script src="js/shift-common.js"></script>
     <script src="js/vehicle.js"></script>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        if (typeof RBShift !== 'undefined') RBShift.injectBanner();
+    });
+    </script>
 </body>
 </html>
