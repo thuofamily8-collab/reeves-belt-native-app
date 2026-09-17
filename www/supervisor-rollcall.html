@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#0a0e1a">
+    <title>Roll Call - Reeves Belt App</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background: #0a0e1a;
+            color: #fff;
+            font-family: -apple-system, "Segoe UI", Arial, sans-serif;
+            padding-bottom: 20px;
+            min-height: 100vh;
+        }
+        .rc-header {
+            background: linear-gradient(135deg, #0a192f, #1a2f4a);
+            padding: 16px 20px;
+            border-bottom: 2px solid #d4af37;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        .rc-back {
+            background: none;
+            border: none;
+            color: #d4af37;
+            font-size: 22px;
+            cursor: pointer;
+            padding: 4px 8px;
+        }
+        .rc-header h1 {
+            font-size: 18px;
+            color: #d4af37;
+            font-weight: 600;
+            flex: 1;
+            margin: 0;
+        }
+        .rc-tenant {
+            background: rgba(212, 175, 55, 0.15);
+            color: #d4af37;
+            font-size: 11px;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-weight: 700;
+        }
+
+        .rc-status {
+            background: #14192e;
+            margin: 12px;
+            padding: 14px 16px;
+            border-radius: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-left: 3px solid #d4af37;
+        }
+        .rc-status-label { font-size: 10px; color: #8892b0; text-transform: uppercase; letter-spacing: 1px; }
+        .rc-status-value { font-size: 13px; color: #fff; font-family: monospace; margin-top: 4px; }
+        .rc-refresh {
+            background: #d4af37;
+            color: #0a0e1a;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        .rc-refresh:disabled { opacity: 0.5; }
+
+        .rc-section-title {
+            color: #d4af37;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding: 16px 20px 8px;
+        }
+
+        .guard-card {
+            background: #14192e;
+            margin: 0 12px 10px;
+            padding: 14px 16px;
+            border-radius: 12px;
+            border-left: 4px solid #94a3b8;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+        }
+        .guard-card.on-duty { border-left-color: #10b981; }
+        .guard-card.nearby { border-left-color: #f59e0b; }
+
+        .guard-info { flex: 1; min-width: 0; }
+        .guard-name { font-weight: 700; font-size: 14px; color: #fff; }
+        .guard-meta { font-size: 11px; color: #8892b0; margin-top: 4px; }
+        .guard-distance { font-size: 13px; color: #d4af37; font-weight: 700; margin-top: 4px; }
+
+        .guard-status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #94a3b8;
+            margin-right: 6px;
+        }
+        .guard-status-dot.active { background: #10b981; box-shadow: 0 0 8px #10b981; }
+
+        .btn-call {
+            background: linear-gradient(135deg, #d4af37, #f0d060);
+            color: #0a0e1a;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+        .btn-call:disabled {
+            background: #333;
+            color: #666;
+            cursor: not-allowed;
+        }
+
+        .rc-empty {
+            margin: 12px;
+            padding: 30px 20px;
+            background: #14192e;
+            border-radius: 12px;
+            text-align: center;
+            color: #8892b0;
+            font-size: 13px;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.9);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            padding: 20px;
+        }
+        .modal-overlay.show { display: flex; }
+        .modal-box {
+            background: #14192e;
+            border-radius: 16px;
+            padding: 24px;
+            width: 100%;
+            max-width: 380px;
+            border: 2px solid #d4af37;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .modal-box h3 {
+            color: #d4af37;
+            font-size: 16px;
+            text-align: center;
+            margin-bottom: 16px;
+        }
+        .modal-box p {
+            color: #ccd6f6;
+            font-size: 13px;
+            line-height: 1.5;
+            margin-bottom: 16px;
+            text-align: center;
+        }
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 16px;
+        }
+        .modal-actions button {
+            flex: 1;
+            padding: 12px;
+            border-radius: 10px;
+            border: none;
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            cursor: pointer;
+        }
+        .btn-confirm { background: #10b981; color: #fff; }
+        .btn-cancel { background: #333; color: #fff; }
+        .btn-warn { background: #f59e0b; color: #fff; }
+
+        .modal-input {
+            width: 100%;
+            padding: 12px;
+            border-radius: 8px;
+            background: #0a0e1a;
+            color: #fff;
+            border: 2px solid #d4af37;
+            font-size: 13px;
+            font-family: inherit;
+        }
+        .modal-input:focus { outline: none; }
+
+        /* Camera capture */
+        #selfieVideo {
+            width: 100%;
+            border-radius: 12px;
+            background: #000;
+            aspect-ratio: 1 / 1;
+            object-fit: cover;
+        }
+        #selfieCanvas { display: none; }
+        #selfiePreview {
+            width: 100%;
+            border-radius: 12px;
+            display: none;
+            aspect-ratio: 1 / 1;
+            object-fit: cover;
+        }
+
+        /* Loading */
+        #loadingOverlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.75);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 999;
+            color: #d4af37;
+        }
+        #loadingOverlay.show { display: flex; }
+    </style>
+</head>
+<body>
+
+<div class="rc-header">
+    <button class="rc-back" onclick="window.location.href='supervisor.html'">←</button>
+    <h1>📢 Roll Call</h1>
+    <div class="rc-tenant" id="rcTenant">Loading...</div>
+</div>
+
+<div class="rc-status">
+    <div>
+        <div class="rc-status-label">📍 Your Position</div>
+        <div class="rc-status-value" id="rcCoords">Fetching...</div>
+    </div>
+    <button class="rc-refresh" id="rcRefreshBtn" onclick="RBRollCall.refresh()">🔄 Refresh</button>
+</div>
+
+<div class="rc-section-title">👥 Guards</div>
+<div id="guardsContainer">
+    <div class="rc-empty">Loading guards...</div>
+</div>
+
+<!-- Modal: Warning/Confirmation -->
+<div class="modal-overlay" id="confirmModal">
+    <div class="modal-box">
+        <h3 id="confirmTitle">Confirm</h3>
+        <p id="confirmMessage">Are you sure?</p>
+        <div id="overrideField" style="display:none;">
+            <textarea id="overrideReason" class="modal-input" rows="2" placeholder="Reason for override..."></textarea>
+        </div>
+        <div class="modal-actions">
+            <button class="btn-cancel" onclick="RBRollCall.closeConfirm()">Cancel</button>
+            <button class="btn-warn" id="confirmBtn" onclick="RBRollCall.confirmProceed()">Override</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Selfie -->
+<div class="modal-overlay" id="selfieModal">
+    <div class="modal-box">
+        <h3>📸 Roll Call Selfie</h3>
+        <p>Stand next to <strong id="selfieGuardName">the guard</strong> so both faces are visible.</p>
+        <video id="selfieVideo" autoplay playsinline muted></video>
+        <img id="selfiePreview" alt="Captured">
+        <div class="modal-actions" id="selfieActions">
+            <button class="btn-cancel" onclick="RBRollCall.cancelSelfie()">Cancel</button>
+            <button class="btn-confirm" id="selfieCaptureBtn" onclick="RBRollCall.captureSelfie()">📸 Capture</button>
+        </div>
+        <div class="modal-actions" id="selfieConfirmActions" style="display:none;">
+            <button class="btn-cancel" onclick="RBRollCall.retakeSelfie()">Retake</button>
+            <button class="btn-confirm" onclick="RBRollCall.submitRollCall()">✓ Submit</button>
+        </div>
+    </div>
+</div>
+
+<div id="loadingOverlay"><div id="loadingText">Loading...</div></div>
+
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/offline.js"></script>
+<script src="js/permissions.js"></script>
+<script src="js/app.js"></script>
+<script src="js/supervisor-rollcall.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    RBRollCall.init();
+});
+</script>
+
+</body>
+</html>
