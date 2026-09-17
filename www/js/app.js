@@ -1,6 +1,6 @@
 /**
  * ============================================================
- * REEVES BELT SECURE 360 - APP LOGIC
+ * REEVES BELT APP - APP LOGIC
  * ============================================================
  */
 
@@ -26,19 +26,42 @@ var RBApp = (function() {
     }
 
     // ============================================================
+    // LOGOUT CONFIRMATION
+    // ============================================================
+    function confirmLogout() {
+        var onShift = (typeof RBShift !== 'undefined' && RBShift.isActive());
+        var msg = onShift
+            ? 'You are on duty. Logging out will keep your shift active.\n\nContinue?'
+            : 'Log out of the app?';
+
+        if (!confirm(msg)) return;
+
+        if (typeof RBAuth !== 'undefined') {
+            RBAuth.logout();
+        } else {
+            localStorage.clear();
+            window.location.href = 'login.html';
+        }
+    }
+
+    // ============================================================
     // DASHBOARD STATS
     // ============================================================
     function loadDashboardStats() {
         RBApi.getVehiclesInside().then(function(res) {
-            document.getElementById('statVehicles').textContent = res.count || 0;
+            var el = document.getElementById('statVehicles');
+            if (el) el.textContent = res.count || 0;
         }).catch(function() {
-            document.getElementById('statVehicles').textContent = '--';
+            var el = document.getElementById('statVehicles');
+            if (el) el.textContent = '--';
         });
 
         RBApi.getVisitorsInside().then(function(res) {
-            document.getElementById('statVisitors').textContent = res.count || 0;
+            var el = document.getElementById('statVisitors');
+            if (el) el.textContent = res.count || 0;
         }).catch(function() {
-            document.getElementById('statVisitors').textContent = '--';
+            var el = document.getElementById('statVisitors');
+            if (el) el.textContent = '--';
         });
     }
 
@@ -48,9 +71,10 @@ var RBApp = (function() {
     function loadPendingDetections() {
         RBApi.getPendingDetections().then(function(res) {
             var list = document.getElementById('notificationsList');
+            if (!list) return;
             var count = res.count || 0;
-
-            document.getElementById('statDetections').textContent = count;
+            var stat = document.getElementById('statDetections');
+            if (stat) stat.textContent = count;
 
             if (count === 0) {
                 list.innerHTML = '<div class="notification-empty">No pending alerts</div>';
@@ -74,6 +98,7 @@ var RBApp = (function() {
             list.innerHTML = html;
         }).catch(function(err) {
             var list = document.getElementById('notificationsList');
+            if (!list) return;
             if (err.code === 'unauthorized') {
                 list.innerHTML = '<div class="notification-empty">Session expired</div>';
             } else {
@@ -85,7 +110,6 @@ var RBApp = (function() {
     function openDetection(id) {
         localStorage.setItem('rb_detection_id', id);
         showToast('Detection #' + id + ' selected', 'success');
-        // Later: window.location.href = 'vehicle-entry.html?detection_id=' + id;
     }
 
     // ============================================================
@@ -117,23 +141,18 @@ var RBApp = (function() {
             if (online) {
                 bar.className = 'network-bar online show';
                 bar.textContent = '● ONLINE';
-                setTimeout(function() {
-                    bar.classList.remove('show');
-                }, 2000);
+                setTimeout(function() { bar.classList.remove('show'); }, 2000);
             } else {
                 bar.className = 'network-bar offline show';
                 bar.textContent = '● OFFLINE — Data will sync later';
             }
         }
 
-        // Initial check
         updateStatus(navigator.onLine);
 
-        // Listen for changes
         window.addEventListener('online', function() { updateStatus(true); });
         window.addEventListener('offline', function() { updateStatus(false); });
 
-        // Capacitor Network plugin
         if (window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.Network) {
             Capacitor.Plugins.Network.addListener('networkStatusChange', function(status) {
                 updateStatus(status.connected);
@@ -141,9 +160,6 @@ var RBApp = (function() {
         }
     }
 
-    // ============================================================
-    // COMING SOON
-    // ============================================================
     function comingSoon(feature) {
         showToast(feature + ' - Coming in next update', 'warning');
         if (navigator.vibrate) navigator.vibrate(30);
@@ -151,6 +167,7 @@ var RBApp = (function() {
 
     return {
         showToast: showToast,
+        confirmLogout: confirmLogout,
         loadDashboardStats: loadDashboardStats,
         loadPendingDetections: loadPendingDetections,
         openDetection: openDetection,
@@ -161,7 +178,6 @@ var RBApp = (function() {
     };
 })();
 
-// Global helper for inline onclick
 function comingSoon(feature) {
     RBApp.comingSoon(feature);
 }
