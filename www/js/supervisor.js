@@ -203,7 +203,6 @@ var RBSupervisor = (function() {
     }
 
     function startShift() {
-        // Fallback chain for permission
         var permissionPromise;
 
         if (typeof RBPermissions !== 'undefined' && typeof RBPermissions.requestLocation === 'function') {
@@ -259,18 +258,49 @@ var RBSupervisor = (function() {
             return;
         }
 
-        var tenants = getSupervisorTenants();
-        var activeTenantId = localStorage.getItem(SHIFT_TENANT_KEY) || getCurrentTenantId();
-        var tenantName = 'Unknown';
-        tenants.forEach(function(t) {
-            if (String(t.id) === String(activeTenantId)) tenantName = t.site_name;
-        });
-        var el = document.getElementById('shiftTenant');
-        if (el) el.textContent = tenantName;
+        // Load tenant name — try cache first, then fetch
+        resolveTenantName();
 
         startTimer();
         startGPSPings();
         startBatteryMonitor();
+    }
+
+    function resolveTenantName() {
+        var activeTenantId = localStorage.getItem(SHIFT_TENANT_KEY) || getCurrentTenantId();
+
+        // Try local cache
+        var tenants = getSupervisorTenants();
+        var tenantName = null;
+        tenants.forEach(function(t) {
+            if (String(t.id) === String(activeTenantId)) tenantName = t.site_name;
+        });
+
+        if (tenantName) {
+            setTenantName(tenantName);
+            return;
+        }
+
+        // Fetch from server
+        RBApi.getSupervisorDashboard(activeTenantId).then(function(res) {
+            var fetchedTenants = (res && res.tenants) ? res.tenants : [];
+            localStorage.setItem('rb_supervisor_tenants', JSON.stringify(fetchedTenants));
+
+            var found = null;
+            fetchedTenants.forEach(function(t) {
+                if (String(t.id) === String(activeTenantId)) found = t.site_name;
+            });
+
+            setTenantName(found || 'Unknown Tenant');
+        }).catch(function(err) {
+            console.log('Tenant fetch failed:', err);
+            setTenantName('Unknown Tenant');
+        });
+    }
+
+    function setTenantName(name) {
+        var el = document.getElementById('shiftTenant');
+        if (el) el.textContent = name;
     }
 
     function startTimer() {
@@ -410,6 +440,65 @@ var RBSupervisor = (function() {
     }
 
     // ============================================================
+    // LOGOUT OPTIONS
+    // ============================================================
+    function openLogoutOptions() {
+        var modal = document.getElementById('logoutModal');
+        if (modal) modal.classList.add('show');
+    }
+
+    function closeLogoutOptions() {
+        var modal = document.getElementById('logoutModal');
+        if (modal) modal.classList.remove('show');
+    }
+
+    /**
+     * Ends the current user's session (clears their login token),
+     * but keeps the shift active on the device.
+     * Use case: supervisor A starts shift → hands phone to supervisor B mid-shift.
+     */
+    function logoutKeepShift() {
+        if (!confirm('Switch user? The active shift will continue running.')) return;
+
+        // Clear only the user session, not the shift
+        RBAuth.clearSession();
+
+        // Stop pings temporarily — new user will restart them
+        if (gpsInterval) { clearInterval(gpsInterval); gpsInterval = null; }
+        if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+
+        window.location.href = 'login.html';
+    }
+
+    /**
+     * Ends the shift AND logs out.
+     * Use case: end of the day, supervisor goes home.
+     */
+    function logoutEndShift() {
+        if (!confirm('End shift AND logout? You will need to log in again.')) return;
+
+        // Clear the shift entirely
+        localStorage.removeItem(SHIFT_KEY);
+        localStorage.removeItem(SHIFT_START_KEY);
+        localStorage.removeItem(SHIFT_TENANT_KEY);
+        localStorage.removeItem(SUPER_TENANT_KEY);
+
+        if (gpsInterval) { clearInterval(gpsInterval); gpsInterval = null; }
+        if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+
+        // Notify server
+        RBApi.endSupervisorShift().catch(function() {});
+
+        // Logout
+        RBApi.logout().then(function() {
+        }).catch(function() {
+        }).then(function() {
+            RBAuth.clearSession();
+            window.location.href = 'login.html';
+        });
+    }
+
+    // ============================================================
     // HELPERS
     // ============================================================
     function escapeHtml(text) {
@@ -441,6 +530,10 @@ var RBSupervisor = (function() {
         toggleShift: toggleShift,
         requestEndShift: requestEndShift,
         cancelEndShift: cancelEndShift,
-        confirmEndShift: confirmEndShift
+        confirmEndShift: confirmEndShift,
+        openLogoutOptions: openLogoutOptions,
+        closeLogoutOptions: closeLogoutOptions,
+        logoutKeepShift: logoutKeepShift,
+        logoutEndShift: logoutEndShift
     };
 })();
