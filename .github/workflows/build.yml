@@ -16,13 +16,13 @@ jobs:
 
     steps:
       # ------------------------------------------------------------
-      # 1. Check out the code
+      # 1. Checkout
       # ------------------------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
 
       # ------------------------------------------------------------
-      # 2. Node.js setup
+      # 2. Node.js
       # ------------------------------------------------------------
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -30,7 +30,7 @@ jobs:
           node-version: '22'
 
       # ------------------------------------------------------------
-      # 3. Java JDK for Gradle
+      # 3. Java JDK
       # ------------------------------------------------------------
       - name: Setup Java JDK 17
         uses: actions/setup-java@v4
@@ -62,9 +62,19 @@ jobs:
           fi
 
       # ------------------------------------------------------------
-      # 7. Patch target SDK for Android 14+ compatibility
-      #    Android 14 requires apps to target SDK 23 or higher.
-      #    We target 34 for maximum compatibility and Play Store compliance.
+      # 7. Generate Android icons + splash screens from resources/
+      #    This is what creates the gold shield icon in all sizes.
+      # ------------------------------------------------------------
+      - name: Generate Android assets
+        run: |
+          npx @capacitor/assets generate \
+            --android \
+            --iconBackgroundColor '#0a0e1a' \
+            --splashBackgroundColor '#0a0e1a'
+        continue-on-error: true
+
+      # ------------------------------------------------------------
+      # 8. Patch target SDK for Android 14+ compatibility
       # ------------------------------------------------------------
       - name: Patch target SDK for Android 14 compatibility
         run: |
@@ -90,7 +100,7 @@ jobs:
           cat android/variables.gradle
 
       # ------------------------------------------------------------
-      # 8. Patch AndroidManifest.xml with required permissions
+      # 9. Patch AndroidManifest permissions
       # ------------------------------------------------------------
       - name: Patch AndroidManifest permissions
         run: |
@@ -114,26 +124,26 @@ jobs:
           cat "$MANIFEST"
 
       # ------------------------------------------------------------
-      # 9. Capacitor sync
+      # 10. Capacitor sync
       # ------------------------------------------------------------
       - name: Capacitor sync
         run: npx cap sync android
 
       # ------------------------------------------------------------
-      # 10. Make Gradle wrapper executable
+      # 11. Make gradlew executable
       # ------------------------------------------------------------
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
       # ------------------------------------------------------------
-      # 11. Build Debug APK
+      # 12. Build Debug APK
       # ------------------------------------------------------------
       - name: Build Debug APK
         working-directory: android
         run: ./gradlew assembleDebug --stacktrace
 
       # ------------------------------------------------------------
-      # 12. Prepare artifact
+      # 13. Prepare artifact
       # ------------------------------------------------------------
       - name: Prepare APK artifact
         run: |
@@ -144,7 +154,7 @@ jobs:
           ls -la artifacts/
 
       # ------------------------------------------------------------
-      # 13. Upload APK
+      # 14. Upload APK
       # ------------------------------------------------------------
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -155,7 +165,7 @@ jobs:
           if-no-files-found: error
 
       # ------------------------------------------------------------
-      # 14. Attach APK to GitHub Release (optional, on tags)
+      # 15. Attach APK to GitHub Release (on tags)
       # ------------------------------------------------------------
       - name: Attach APK to GitHub Release
         if: github.event_name == 'release'
