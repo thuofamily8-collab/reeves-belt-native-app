@@ -17,6 +17,9 @@
             <div class="form-header-title">👥 Visitor Check-in</div>
         </div>
 
+        <!-- SHIFT BANNER -->
+        <div id="rbDutyBanner" style="display:none;"></div>
+
         <!-- Tab Switcher -->
         <div class="tab-switcher">
             <button class="tab-btn active" id="tabCheckIn" onclick="switchTab('checkin')">✓ Check-In</button>
@@ -60,7 +63,6 @@
                             <label class="field-label">ID Number *</label>
                             <input type="text" id="visitorId" class="field-input" placeholder="National ID" required>
                         </div>
-
                         <div class="field">
                             <label class="field-label">Phone *</label>
                             <input type="tel" id="visitorPhone" class="field-input" placeholder="0712345678" required>
@@ -71,7 +73,6 @@
                         <label class="field-label">Company / Organisation</label>
                         <input type="text" id="visitorCompany" class="field-input" placeholder="e.g., ABC Ltd">
                     </div>
-
                 </div>
 
                 <div class="form-card">
@@ -104,10 +105,8 @@
                             💬 Optional: notes about what the visitor is bringing / doing
                         </div>
                     </div>
-
                 </div>
 
-                <!-- Arrived with vehicle toggle -->
                 <div class="form-card">
                     <div class="form-card-title">🚗 Vehicle (Optional)</div>
 
@@ -122,7 +121,6 @@
                             <label class="field-label">Vehicle Plate</label>
                             <input type="text" id="visitorVehiclePlate" class="field-input" placeholder="e.g., KDB 555Z" autocapitalize="characters">
                         </div>
-
                         <div class="field-row">
                             <div class="field">
                                 <label class="field-label">Vehicle Type</label>
@@ -134,7 +132,6 @@
                                     <option value="Motorcycle">Motorcycle</option>
                                 </select>
                             </div>
-
                             <div class="field">
                                 <label class="field-label">Vehicle Model</label>
                                 <input type="text" id="visitorVehicleModel" class="field-input" placeholder="e.g., Toyota Prado">
@@ -166,7 +163,6 @@
 
     </div>
 
-    <!-- Fixed Bottom Actions (only for check-in view) -->
     <div class="form-actions" id="checkinActions">
         <button type="button" class="action-btn green" onclick="submitVisitor()" id="submitBtn">
             ✓ CHECK-IN
@@ -176,7 +172,6 @@
         </button>
     </div>
 
-    <!-- Loading Overlay -->
     <div class="loading-overlay" id="loadingOverlay">
         <div class="loading-spinner"></div>
         <div class="loading-text" id="loadingText">Processing...</div>
@@ -185,6 +180,13 @@
     <script src="js/api.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/offline.js"></script>
+    <script src="js/permissions.js"></script>
+    <script src="js/shift-common.js"></script>
     <script src="js/visitor.js"></script>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        if (typeof RBShift !== 'undefined') RBShift.injectBanner();
+    });
+    </script>
 </body>
 </html>
