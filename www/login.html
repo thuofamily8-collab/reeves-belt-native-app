@@ -8,6 +8,9 @@
     <link rel="stylesheet" href="css/app.css">
 </head>
 <body class="login-page">
+
+    <div class="network-bar" id="networkBar"></div>
+
     <div class="login-container">
         <img src="assets/logo.png" alt="Reeves Belt" class="login-logo" onerror="this.style.display='none'">
 
@@ -44,71 +47,139 @@
 
     <script src="js/api.js"></script>
     <script src="js/auth.js"></script>
+    <script src="js/offline.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // If already logged in, go to the correct landing page based on role
+
+            // Init network bar on login screen too
+            if (typeof RBOffline !== 'undefined') {
+                RBOffline.init();
+            }
+
+            // If already logged in, go to landing page
             if (RBAuth.isLoggedIn()) {
                 window.location.href = RBAuth.getDefaultLandingPage();
                 return;
             }
 
-            var form = document.getElementById('loginForm');
-            var btn = document.getElementById('loginBtn');
-            var btnText = document.getElementById('loginBtnText');
+            var form     = document.getElementById('loginForm');
+            var btn      = document.getElementById('loginBtn');
+            var btnText  = document.getElementById('loginBtnText');
             var errorBox = document.getElementById('loginError');
 
-            form.addEventListener('submit', function(e) {
+            function showError(msg) {
+                errorBox.textContent = '❌ ' + msg;
+                errorBox.style.display = 'block';
+                if (navigator.vibrate) navigator.vibrate([50, 50, 50]);
+            }
+
+            function clearError() {
+                errorBox.style.display = 'none';
+                errorBox.textContent = '';
+            }
+
+            function resetButton() {
+                btn.disabled = false;
+                btnText.textContent = 'LOGIN';
+            }
+
+            function goToLanding() {
+                window.location.href = RBAuth.getDefaultLandingPage();
+            }
+
+            // ---- Offline login path ----
+            function tryOfflineLogin(username, password) {
+                if (!RBAuth.hasCachedCredentials()) {
+                    showError('You are offline and no cached credentials are available. Connect to the internet and log in once.');
+                    resetButton();
+                    return;
+                }
+
+                RBAuth.loginOffline(username, password).then(function (result) {
+                    if (result.ok) {
+                        if (navigator.vibrate) navigator.vibrate(100);
+                        btnText.textContent = 'OFFLINE MODE';
+                        setTimeout(goToLanding, 500);
+                    } else {
+                        showError(result.message || 'Offline login failed.');
+                        resetButton();
+                    }
+                }).catch(function () {
+                    showError('Offline login failed.');
+                    resetButton();
+                });
+            }
+
+            // ---- Online login path ----
+            function doOnlineLogin(username, password, deviceInfo) {
+                RBApi.login(username, password, deviceInfo)
+                    .then(function (response) {
+                        RBAuth.saveSession(response);
+
+                        // Cache credentials for future offline use
+                        RBAuth.cacheCredentials(username, password).then(function () {
+                            if (navigator.vibrate) navigator.vibrate(100);
+                            btnText.textContent = 'SUCCESS!';
+                            setTimeout(goToLanding, 400);
+                        });
+                    })
+                    .catch(function (err) {
+                        // Network failure → fall back to offline
+                        var isNetErr = !err
+                                    || err.code === 'network_error'
+                                    || err.code === 'timeout'
+                                    || err.code === 'no_response'
+                                    || err.httpStatus === 0
+                                    || (err.error && /cannot reach|network|timed out/i.test(err.error));
+
+                        if (isNetErr) {
+                            console.log('[login] Network error — trying offline login');
+                            tryOfflineLogin(username, password);
+                        } else {
+                            showError((err && err.error) || 'Login failed. Check your credentials.');
+                            resetButton();
+                        }
+                    });
+            }
+
+            // ---- Submit handler ----
+            form.addEventListener('submit', function (e) {
                 e.preventDefault();
 
                 var username = document.getElementById('username').value.trim();
                 var password = document.getElementById('password').value;
 
                 if (!username || !password) {
-                    errorBox.textContent = 'Please enter username and password';
-                    errorBox.style.display = 'block';
+                    showError('Please enter username and password');
                     return;
                 }
 
-                errorBox.style.display = 'none';
+                clearError();
                 btn.disabled = true;
                 btnText.innerHTML = '<span class="spinner"></span>SIGNING IN...';
 
-                // Get device info
                 var deviceInfo = {
                     device_id: 'android-' + Date.now(),
                     device_name: 'Android Device',
                     device_platform: 'android'
                 };
 
-                if (window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.Device) {
-                    Capacitor.Plugins.Device.getInfo().then(function(info) {
-                        deviceInfo.device_name = (info.manufacturer || '') + ' ' + (info.model || 'Device');
-                        deviceInfo.device_platform = info.platform || 'android';
-                    }).catch(function() {}).then(doLogin);
-                } else {
-                    doLogin();
+                // If already known to be offline, skip network entirely
+                if (navigator.onLine === false) {
+                    console.log('[login] Offline detected — using cached credentials');
+                    tryOfflineLogin(username, password);
+                    return;
                 }
 
-                function doLogin() {
-                    RBApi.login(username, password, deviceInfo)
-                        .then(function(response) {
-                            RBAuth.saveSession(response);
-
-                            // Vibrate to confirm
-                            if (navigator.vibrate) navigator.vibrate(100);
-
-                            btnText.textContent = 'SUCCESS!';
-                            setTimeout(function() {
-                                window.location.href = RBAuth.getDefaultLandingPage();
-                            }, 400);
-                        })
-                        .catch(function(err) {
-                            errorBox.textContent = '❌ ' + (err.error || 'Login failed. Check your credentials.');
-                            errorBox.style.display = 'block';
-                            btn.disabled = false;
-                            btnText.textContent = 'LOGIN';
-                            if (navigator.vibrate) navigator.vibrate([50, 50, 50]);
-                        });
+                if (window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.Device) {
+                    Capacitor.Plugins.Device.getInfo().then(function (info) {
+                        deviceInfo.device_name = (info.manufacturer || '') + ' ' + (info.model || 'Device');
+                        deviceInfo.device_platform = info.platform || 'android';
+                    }).catch(function () {}).then(function () {
+                        doOnlineLogin(username, password, deviceInfo);
+                    });
+                } else {
+                    doOnlineLogin(username, password, deviceInfo);
                 }
             });
         });
