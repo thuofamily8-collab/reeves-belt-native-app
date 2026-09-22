@@ -51,6 +51,21 @@
     <script>
         document.addEventListener('DOMContentLoaded', function() {
 
+                        // ---- TEMP DIAGNOSTIC (remove after Sprint 1 verified) ----
+            setTimeout(function () {
+                var msg =
+                    'URL: ' + location.href + '\n' +
+                    'RBAuth: ' + (typeof RBAuth) + '\n' +
+                    'cacheCreds: ' + (typeof RBAuth !== 'undefined' ? typeof RBAuth.cacheCredentials : 'n/a') + '\n' +
+                    'loginOff: ' + (typeof RBAuth !== 'undefined' ? typeof RBAuth.loginOffline : 'n/a') + '\n' +
+                    'salt: ' + (localStorage.getItem('rb_cred_salt') || 'null') + '\n' +
+                    'hash: ' + (localStorage.getItem('rb_cred_hash') ? 'present' : 'null') + '\n' +
+                    'user: ' + (localStorage.getItem('rb_cred_user') || 'null') + '\n' +
+                    'lastLogin: ' + (localStorage.getItem('rb_last_online_login') || 'null') + '\n' +
+                    'token: ' + (localStorage.getItem('rb_token') ? 'present' : 'null');
+                alert(msg);
+            }, 1500);
+
             // Init network bar on login screen too
             if (typeof RBOffline !== 'undefined') {
                 RBOffline.init();
