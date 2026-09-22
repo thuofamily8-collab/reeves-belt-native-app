@@ -7,6 +7,7 @@
  *   - RBOffline: network status bar + last-sync timestamp
  *   - Admin "force online" override
  *   - Listeners for online/offline transitions
+ *   - Reuses the existing #networkBar element from dashboard.html
  * ============================================================
  */
 
@@ -70,7 +71,6 @@ var OfflineSync = (function() {
                     saveQueue(remainingQueue);
                     console.log('[OfflineSync] Done. Synced:', synced, 'Failed:', failed);
 
-                    // Sprint 1: update last-sync timestamp on successful push
                     if (synced > 0 && typeof RBOffline !== 'undefined') {
                         RBOffline.setLastSync(Date.now());
                     }
@@ -124,7 +124,7 @@ var OfflineSync = (function() {
             var token = localStorage.getItem('rb_token');
             if (token) {
                 xhr.setRequestHeader('Authorization', 'Bearer ' + token);
-                xhr.setRequestHeader('X-Auth-Token', token);   // host strips Authorization
+                xhr.setRequestHeader('X-Auth-Token', token);
             }
 
             xhr.timeout = 20000;
@@ -181,33 +181,28 @@ var OfflineSync = (function() {
 /* ============================================================
    RBOffline — SPRINT 1
    Network bar, last-sync tracking, admin force-online override
+   Reuses the existing #networkBar element already in dashboard.html
    ============================================================ */
 
 var RBOffline = (function () {
 
     var _online = true;
     var _listeners = [];
+    var _hideTimer = null;
 
     var KEY_LAST_SYNC    = 'rb_last_sync';
     var KEY_FORCE_ONLINE = 'rb_force_online';
 
     // ----------------------------------------------------------
-    // Init — call from dashboard.js after DOM ready
+    // Init
     // ----------------------------------------------------------
     function init() {
-        // Initial state
-        if (navigator.onLine === false) {
-            _online = false;
-        } else {
-            _online = true;
-        }
+        _online = (navigator.onLine !== false);
         updateNetworkBar();
 
-        // Browser-level events
         window.addEventListener('online',  function () { setOnline(true);  });
         window.addEventListener('offline', function () { setOnline(false); });
 
-        // Capacitor Network plugin (more reliable on Android)
         if (window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.Network) {
             try {
                 Capacitor.Plugins.Network.addListener('networkStatusChange', function (status) {
@@ -221,7 +216,7 @@ var RBOffline = (function () {
     }
 
     // ----------------------------------------------------------
-    // Online state
+    // State
     // ----------------------------------------------------------
     function isOnline()  { return _online; }
     function isOffline() { return !_online; }
@@ -234,7 +229,7 @@ var RBOffline = (function () {
     }
 
     // ----------------------------------------------------------
-    // Force online (admin override)
+    // Force online
     // ----------------------------------------------------------
     function setForceOnline(v) {
         try {
@@ -245,23 +240,18 @@ var RBOffline = (function () {
     }
 
     function isForceOnline() {
-        try {
-            return localStorage.getItem(KEY_FORCE_ONLINE) === '1';
-        } catch (e) {
-            return false;
-        }
+        try { return localStorage.getItem(KEY_FORCE_ONLINE) === '1'; }
+        catch (e) { return false; }
     }
 
     // ----------------------------------------------------------
-    // Last sync tracking
+    // Last sync
     // ----------------------------------------------------------
     function getLastSync() {
         try {
             var v = localStorage.getItem(KEY_LAST_SYNC);
             return v ? parseInt(v, 10) : 0;
-        } catch (e) {
-            return 0;
-        }
+        } catch (e) { return 0; }
     }
 
     function setLastSync(ts) {
@@ -294,45 +284,43 @@ var RBOffline = (function () {
     }
 
     // ----------------------------------------------------------
-    // Network bar UI
+    // Network bar
+    // Reuses the existing #networkBar element from dashboard.html.
     // ----------------------------------------------------------
-    function ensureNetworkBar() {
-        var bar = document.getElementById('network-bar');
-        if (bar) return bar;
-
-        bar = document.createElement('div');
-        bar.id = 'network-bar';
-        bar.className = 'network-bar';
-        bar.innerHTML = '<span id="network-bar-text">Checking…</span>';
-        if (document.body) {
-            document.body.insertBefore(bar, document.body.firstChild);
-        }
+    function getBar() {
+        var bar = document.getElementById('networkBar');
+        if (!bar) bar = document.getElementById('network-bar');
         return bar;
     }
 
     function updateNetworkBar() {
-        if (!document.body) return;
-        var bar = ensureNetworkBar();
-        var txt = document.getElementById('network-bar-text');
-        if (!bar || !txt) return;
+        var bar = getBar();
+        if (!bar) return;
 
         var pending = 0;
         if (typeof OfflineSync !== 'undefined') {
             try { pending = OfflineSync.getQueueCount(); } catch (e) { pending = 0; }
         }
 
+        // Cancel any pending hide from a previous state change
+        if (_hideTimer) {
+            clearTimeout(_hideTimer);
+            _hideTimer = null;
+        }
+
         if (_online) {
-            bar.className = 'network-bar online';
-            txt.textContent = 'ONLINE' +
+            bar.className = 'network-bar online show';
+            bar.textContent = '● ONLINE' +
                 (pending > 0 ? ' — ' + pending + ' pending' : '') +
                 ' — last sync ' + humanLastSync();
-            bar.classList.add('show');
-            setTimeout(function () {
-                if (_online) bar.classList.remove('show');
+            // Auto-hide after 3 seconds
+            _hideTimer = setTimeout(function () {
+                var b = getBar();
+                if (b && _online) b.classList.remove('show');
             }, 3000);
         } else {
             bar.className = 'network-bar offline show';
-            txt.textContent = '⚠ NO INTERNET — Working offline' +
+            bar.textContent = '⚠ NO INTERNET — Working offline' +
                 (pending > 0 ? ' (' + pending + ' pending)' : '') +
                 '. Changes will sync when online.';
         }
