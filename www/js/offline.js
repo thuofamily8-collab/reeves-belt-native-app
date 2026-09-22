@@ -2,6 +2,11 @@
  * ============================================================
  * REEVES BELT SECURE 360 - OFFLINE SYNC ENGINE
  * Queues records when offline, auto-syncs when online
+ *
+ * SPRINT 1 ADDITIONS:
+ *   - RBOffline: network status bar + last-sync timestamp
+ *   - Admin "force online" override
+ *   - Listeners for online/offline transitions
  * ============================================================
  */
 
@@ -64,6 +69,12 @@ var OfflineSync = (function() {
                 if (processed >= queue.length) {
                     saveQueue(remainingQueue);
                     console.log('[OfflineSync] Done. Synced:', synced, 'Failed:', failed);
+
+                    // Sprint 1: update last-sync timestamp on successful push
+                    if (synced > 0 && typeof RBOffline !== 'undefined') {
+                        RBOffline.setLastSync(Date.now());
+                    }
+
                     resolve({ synced: synced, failed: failed });
                     return;
                 }
@@ -97,9 +108,11 @@ var OfflineSync = (function() {
             var endpoint = '';
 
             switch (record.type) {
-                case 'vehicle_entry': endpoint = '/camera/detect.php'; break;
-                case 'visitor_checkin': endpoint = '/visitor/checkin.php'; break;
-                case 'patrol_scan': endpoint = '/patrol/scan.php'; break;
+                case 'vehicle_entry':    endpoint = '/camera/detect.php';    break;
+                case 'vehicle_exit':     endpoint = '/vehicle/exit.php';     break;
+                case 'visitor_checkin':  endpoint = '/visitor/checkin.php';  break;
+                case 'visitor_checkout': endpoint = '/visitor/checkout.php'; break;
+                case 'patrol_scan':      endpoint = '/patrol/scan.php';      break;
                 default: reject(new Error('Unknown record type: ' + record.type)); return;
             }
 
@@ -111,6 +124,7 @@ var OfflineSync = (function() {
             var token = localStorage.getItem('rb_token');
             if (token) {
                 xhr.setRequestHeader('Authorization', 'Bearer ' + token);
+                xhr.setRequestHeader('X-Auth-Token', token);   // host strips Authorization
             }
 
             xhr.timeout = 20000;
@@ -161,4 +175,184 @@ var OfflineSync = (function() {
         getQueueCount: getQueueCount,
         syncNow: syncNow
     };
+})();
+
+
+/* ============================================================
+   RBOffline — SPRINT 1
+   Network bar, last-sync tracking, admin force-online override
+   ============================================================ */
+
+var RBOffline = (function () {
+
+    var _online = true;
+    var _listeners = [];
+
+    var KEY_LAST_SYNC    = 'rb_last_sync';
+    var KEY_FORCE_ONLINE = 'rb_force_online';
+
+    // ----------------------------------------------------------
+    // Init — call from dashboard.js after DOM ready
+    // ----------------------------------------------------------
+    function init() {
+        // Initial state
+        if (navigator.onLine === false) {
+            _online = false;
+        } else {
+            _online = true;
+        }
+        updateNetworkBar();
+
+        // Browser-level events
+        window.addEventListener('online',  function () { setOnline(true);  });
+        window.addEventListener('offline', function () { setOnline(false); });
+
+        // Capacitor Network plugin (more reliable on Android)
+        if (window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.Network) {
+            try {
+                Capacitor.Plugins.Network.addListener('networkStatusChange', function (status) {
+                    setOnline(!!status.connected);
+                });
+                Capacitor.Plugins.Network.getStatus().then(function (status) {
+                    setOnline(!!status.connected);
+                }).catch(function () { /* ignore */ });
+            } catch (e) { /* ignore */ }
+        }
+    }
+
+    // ----------------------------------------------------------
+    // Online state
+    // ----------------------------------------------------------
+    function isOnline()  { return _online; }
+    function isOffline() { return !_online; }
+
+    function setOnline(v) {
+        if (_online === v) return;
+        _online = v;
+        emit({ type: v ? 'online' : 'offline' });
+        updateNetworkBar();
+    }
+
+    // ----------------------------------------------------------
+    // Force online (admin override)
+    // ----------------------------------------------------------
+    function setForceOnline(v) {
+        try {
+            if (v) localStorage.setItem(KEY_FORCE_ONLINE, '1');
+            else   localStorage.removeItem(KEY_FORCE_ONLINE);
+        } catch (e) { /* ignore */ }
+        setOnline(!!v);
+    }
+
+    function isForceOnline() {
+        try {
+            return localStorage.getItem(KEY_FORCE_ONLINE) === '1';
+        } catch (e) {
+            return false;
+        }
+    }
+
+    // ----------------------------------------------------------
+    // Last sync tracking
+    // ----------------------------------------------------------
+    function getLastSync() {
+        try {
+            var v = localStorage.getItem(KEY_LAST_SYNC);
+            return v ? parseInt(v, 10) : 0;
+        } catch (e) {
+            return 0;
+        }
+    }
+
+    function setLastSync(ts) {
+        try {
+            localStorage.setItem(KEY_LAST_SYNC, String(ts || Date.now()));
+        } catch (e) { /* ignore */ }
+        updateNetworkBar();
+    }
+
+    function humanLastSync() {
+        var ts = getLastSync();
+        if (!ts) return 'never';
+        var diff = Math.floor((Date.now() - ts) / 1000);
+        if (diff < 10)    return 'just now';
+        if (diff < 60)    return diff + 's ago';
+        if (diff < 3600)  return Math.floor(diff / 60) + 'm ago';
+        if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+        return Math.floor(diff / 86400) + 'd ago';
+    }
+
+    // ----------------------------------------------------------
+    // Listeners
+    // ----------------------------------------------------------
+    function on(fn) { _listeners.push(fn); }
+
+    function emit(evt) {
+        for (var i = 0; i < _listeners.length; i++) {
+            try { _listeners[i](evt); } catch (e) { /* ignore */ }
+        }
+    }
+
+    // ----------------------------------------------------------
+    // Network bar UI
+    // ----------------------------------------------------------
+    function ensureNetworkBar() {
+        var bar = document.getElementById('network-bar');
+        if (bar) return bar;
+
+        bar = document.createElement('div');
+        bar.id = 'network-bar';
+        bar.className = 'network-bar';
+        bar.innerHTML = '<span id="network-bar-text">Checking…</span>';
+        if (document.body) {
+            document.body.insertBefore(bar, document.body.firstChild);
+        }
+        return bar;
+    }
+
+    function updateNetworkBar() {
+        if (!document.body) return;
+        var bar = ensureNetworkBar();
+        var txt = document.getElementById('network-bar-text');
+        if (!bar || !txt) return;
+
+        var pending = 0;
+        if (typeof OfflineSync !== 'undefined') {
+            try { pending = OfflineSync.getQueueCount(); } catch (e) { pending = 0; }
+        }
+
+        if (_online) {
+            bar.className = 'network-bar online';
+            txt.textContent = 'ONLINE' +
+                (pending > 0 ? ' — ' + pending + ' pending' : '') +
+                ' — last sync ' + humanLastSync();
+            bar.classList.add('show');
+            setTimeout(function () {
+                if (_online) bar.classList.remove('show');
+            }, 3000);
+        } else {
+            bar.className = 'network-bar offline show';
+            txt.textContent = '⚠ NO INTERNET — Working offline' +
+                (pending > 0 ? ' (' + pending + ' pending)' : '') +
+                '. Changes will sync when online.';
+        }
+    }
+
+    // ----------------------------------------------------------
+    // Public
+    // ----------------------------------------------------------
+    return {
+        init:             init,
+        isOnline:         isOnline,
+        isOffline:        isOffline,
+        setOnline:        setOnline,
+        setForceOnline:   setForceOnline,
+        isForceOnline:    isForceOnline,
+        getLastSync:      getLastSync,
+        setLastSync:      setLastSync,
+        humanLastSync:    humanLastSync,
+        on:               on,
+        updateNetworkBar: updateNetworkBar
+    };
+
 })();
