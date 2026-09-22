@@ -2,6 +2,11 @@
  * ============================================================
  * REEVES BELT APP - APP LOGIC
  * ============================================================
+ * SPRINT 1:
+ *   startNetworkMonitor() now defers to RBOffline when available.
+ *   Legacy inline behavior retained as fallback for pages that
+ *   don't load offline.js.
+ * ============================================================
  */
 
 var RBApp = (function() {
@@ -134,10 +139,18 @@ var RBApp = (function() {
     // NETWORK MONITOR
     // ============================================================
     function startNetworkMonitor() {
+        // Sprint 1: RBOffline now owns network state + the bar.
+        // If offline.js loaded RBOffline, defer to it.
+        if (typeof RBOffline !== 'undefined') {
+            RBOffline.init();
+            return;
+        }
+
+        // ---- Legacy fallback (for pages that don't load offline.js) ----
         var bar = document.getElementById('networkBar');
+        if (!bar) return;
 
         function updateStatus(online) {
-            if (!bar) return;
             if (online) {
                 bar.className = 'network-bar online show';
                 bar.textContent = '● ONLINE';
@@ -149,7 +162,6 @@ var RBApp = (function() {
         }
 
         updateStatus(navigator.onLine);
-
         window.addEventListener('online', function() { updateStatus(true); });
         window.addEventListener('offline', function() { updateStatus(false); });
 
