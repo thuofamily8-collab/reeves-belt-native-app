@@ -2,6 +2,9 @@
  * ============================================================
  * REEVES BELT APP - SHIFT COMMON HELPERS
  * Used by guards and supervisors for shared shift functionality
+ *
+ * SPRINT 2:
+ *   - Banner shows "(pending sync)" when shift_start is queued
  * ============================================================
  */
 
@@ -75,6 +78,14 @@ var RBShift = (function() {
     }
 
     // ============================================================
+    // PENDING SYNC CHECK
+    // ============================================================
+    function isPendingSync() {
+        if (typeof OfflineSync === 'undefined') return false;
+        return OfflineSync.hasPendingType('shift_start');
+    }
+
+    // ============================================================
     // SHIFT SCREEN URL
     // ============================================================
     function getShiftScreenUrl() {
@@ -88,28 +99,34 @@ var RBShift = (function() {
     }
 
     // ============================================================
-    // BANNER — inject on any page with <div id="rbDutyBanner"></div>
+    // BANNER
     // ============================================================
     var bannerInterval = null;
 
     function injectBanner() {
         var host = document.getElementById('rbDutyBanner');
         if (!host) return;
+
         if (!isActive()) {
             host.style.display = 'none';
             return;
         }
 
+        var pending = isPendingSync();
+        var dotColor = pending ? '#f59e0b' : '#10b981';
+        var label = pending ? 'ON DUTY (pending sync)' : 'ON DUTY';
+        var borderColor = pending ? '#f59e0b' : '#10b981';
+
         host.style.display = 'block';
         host.innerHTML =
             '<div style="display:flex;align-items:center;justify-content:space-between;' +
-            'background:linear-gradient(135deg,#0a192f,#1a2f4a);border-left:4px solid #10b981;' +
+            'background:linear-gradient(135deg,#0a192f,#1a2f4a);border-left:4px solid ' + borderColor + ';' +
             'padding:10px 14px;border-radius:10px;margin:8px 12px;box-shadow:0 4px 12px rgba(0,0,0,0.4);">' +
                 '<div style="display:flex;align-items:center;gap:10px;">' +
-                    '<span style="width:10px;height:10px;background:#10b981;border-radius:50%;' +
-                    'box-shadow:0 0 8px #10b981;display:inline-block;"></span>' +
+                    '<span style="width:10px;height:10px;background:' + dotColor + ';border-radius:50%;' +
+                    'box-shadow:0 0 8px ' + dotColor + ';display:inline-block;"></span>' +
                     '<div>' +
-                        '<div style="color:#10b981;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;">ON DUTY</div>' +
+                        '<div style="color:' + dotColor + ';font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;">' + label + '</div>' +
                         '<div id="rbDutyTimer" style="color:#d4af37;font-family:\'Courier New\',monospace;font-size:16px;font-weight:700;">00:00:00</div>' +
                     '</div>' +
                 '</div>' +
@@ -146,9 +163,20 @@ var RBShift = (function() {
     }
 
     function confirmEndShift() {
-        if (typeof RBApi !== 'undefined' && RBApi.endStaffShift) {
-            RBApi.endStaffShift({ reason: 'banner-end' }).catch(function() {});
+        var payload = { reason: 'banner-end' };
+
+        if (typeof RBOffline !== 'undefined' && RBOffline.isOffline()) {
+            if (typeof OfflineSync !== 'undefined') {
+                OfflineSync.queueRecord('shift_end', payload);
+            }
+        } else if (typeof RBApi !== 'undefined' && RBApi.endStaffShift) {
+            RBApi.endStaffShift(payload).catch(function() {
+                if (typeof OfflineSync !== 'undefined') {
+                    OfflineSync.queueRecord('shift_end', payload);
+                }
+            });
         }
+
         end();
         if (navigator.vibrate) navigator.vibrate(200);
         window.location.href = (typeof RBAuth !== 'undefined' && RBAuth.isSupervisor && RBAuth.isSupervisor())
@@ -165,6 +193,7 @@ var RBShift = (function() {
         formatElapsed: formatElapsed,
         start: start,
         end: end,
+        isPendingSync: isPendingSync,
         getShiftScreenUrl: getShiftScreenUrl,
         injectBanner: injectBanner,
         requestEndFromBanner: requestEndFromBanner,
