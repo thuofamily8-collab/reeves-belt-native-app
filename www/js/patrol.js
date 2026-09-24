@@ -3,12 +3,9 @@
  * REEVES BELT APP - Patrol Module
  * QR scanning, checkpoint tracking, offline sync
  *
- * UPDATED:
- *  - Runtime camera permission
- *  - 3-pass QR decode (fast → full → attemptBoth)
- *  - Faster scan interval (100ms)
- *  - Continuous autofocus hint
- *  - Shift check: guards must be on duty to scan
+ * SPRINT 2 FIX:
+ *   - submitPatrolScan() only calls the API when online
+ *   - Offline → queue only, no error toast
  * ============================================================
  */
 
@@ -163,15 +160,13 @@ function updateProgress() {
 // SHIFT CHECK HELPER
 // ============================================================
 function requireShiftOrPrompt(action) {
-    if (typeof RBShift === 'undefined') return true;  // shift-common not loaded → allow
+    if (typeof RBShift === 'undefined') return true;
     if (typeof RBAuth === 'undefined') return true;
 
     var role = RBAuth.getRole ? RBAuth.getRole() : '';
 
-    // Supervisors are always allowed (they may be just viewing)
     if (role === 'supervisor') return true;
 
-    // Guards must be on duty
     if (role === 'guard' && !RBShift.isActive()) {
         if (confirm('You must START DUTY before ' + action + '.\n\nStart shift now?')) {
             if (typeof RBGuardShift !== 'undefined' && RBGuardShift.startShift) {
@@ -187,7 +182,7 @@ function requireShiftOrPrompt(action) {
 }
 
 // ============================================================
-// QR SCANNER
+// QR SCANNER (unchanged)
 // ============================================================
 function startScanner() {
     if (!requireShiftOrPrompt('scanning checkpoints')) return;
@@ -280,7 +275,6 @@ function scanQRFrame() {
 
     var code = null;
 
-    // Pass 1: cropped + dontInvert
     try {
         var cropW = Math.floor(scanCanvas.width * 0.7);
         var cropH = Math.floor(scanCanvas.height * 0.7);
@@ -290,7 +284,6 @@ function scanQRFrame() {
         code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' });
     } catch (e) { console.log('Pass 1 error:', e); }
 
-    // Pass 2: full frame + dontInvert
     if (!code) {
         try {
             var fullData = scanCanvasContext.getImageData(0, 0, scanCanvas.width, scanCanvas.height);
@@ -298,7 +291,6 @@ function scanQRFrame() {
         } catch (e) { console.log('Pass 2 error:', e); }
     }
 
-    // Pass 3: cropped + attemptBoth
     if (!code) {
         try {
             var cropW2 = Math.floor(scanCanvas.width * 0.7);
@@ -371,7 +363,7 @@ function stopScanner() {
 }
 
 // ============================================================
-// SUBMIT PATROL SCAN
+// SUBMIT PATROL SCAN (fixed)
 // ============================================================
 function submitPatrolScan(checkpointName, qrData) {
     showLoading('Logging checkpoint...');
@@ -385,11 +377,9 @@ function submitPatrolScan(checkpointName, qrData) {
         sync_hash: 'patrol-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9)
     };
 
-    if (typeof OfflineSync !== 'undefined' && OfflineSync.queueRecord) {
-        OfflineSync.queueRecord('patrol_scan', data);
-    }
+    var online = !(typeof RBOffline !== 'undefined' && RBOffline.isOffline());
 
-    RBApi.logPatrolScan(data).then(function() {
+    function markLocalSuccess() {
         hideLoading();
         if (scannedCheckpoints.indexOf(checkpointName) === -1) {
             scannedCheckpoints.push(checkpointName);
@@ -402,22 +392,23 @@ function submitPatrolScan(checkpointName, qrData) {
             var box = document.getElementById('scanResult');
             if (box) box.style.display = 'none';
         }, 3000);
-        showToast('✓ ' + checkpointName + ' logged', 'success');
-    }).catch(function(err) {
-        hideLoading();
-        if (typeof OfflineSync !== 'undefined' && OfflineSync.queueRecord) {
-            if (scannedCheckpoints.indexOf(checkpointName) === -1) {
-                scannedCheckpoints.push(checkpointName);
-                saveLocalScannedCheckpoints();
-            }
-            renderCheckpoints();
-            renderManualSelect();
-            updateProgress();
-            showToast('⚠ Saved locally - will sync', 'warning');
-        } else {
-            showToast('Failed: ' + (err.error || 'network error'), 'error');
-        }
-    });
+    }
+
+    if (online) {
+        RBApi.logPatrolScan(data).then(function() {
+            markLocalSuccess();
+            showToast('✓ ' + checkpointName + ' logged', 'success');
+        }).catch(function(err) {
+            // Network failed mid-flight → queue
+            OfflineSync.queueRecord('patrol_scan', data);
+            markLocalSuccess();
+            showToast('💾 Saved locally — will sync', 'warning');
+        });
+    } else {
+        OfflineSync.queueRecord('patrol_scan', data);
+        markLocalSuccess();
+        showToast('💾 Saved locally — will sync', 'warning');
+    }
 }
 
 function submitManualScan() {
