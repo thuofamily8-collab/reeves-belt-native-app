@@ -51,21 +51,6 @@
     <script>
         document.addEventListener('DOMContentLoaded', function() {
 
-                        // ---- TEMP DIAGNOSTIC (remove after Sprint 1 verified) ----
-            setTimeout(function () {
-                var msg =
-                    'URL: ' + location.href + '\n' +
-                    'RBAuth: ' + (typeof RBAuth) + '\n' +
-                    'cacheCreds: ' + (typeof RBAuth !== 'undefined' ? typeof RBAuth.cacheCredentials : 'n/a') + '\n' +
-                    'loginOff: ' + (typeof RBAuth !== 'undefined' ? typeof RBAuth.loginOffline : 'n/a') + '\n' +
-                    'salt: ' + (localStorage.getItem('rb_cred_salt') || 'null') + '\n' +
-                    'hash: ' + (localStorage.getItem('rb_cred_hash') ? 'present' : 'null') + '\n' +
-                    'user: ' + (localStorage.getItem('rb_cred_user') || 'null') + '\n' +
-                    'lastLogin: ' + (localStorage.getItem('rb_last_online_login') || 'null') + '\n' +
-                    'token: ' + (localStorage.getItem('rb_token') ? 'present' : 'null');
-                alert(msg);
-            }, 1500);
-
             // Init network bar on login screen too
             if (typeof RBOffline !== 'undefined') {
                 RBOffline.init();
@@ -104,6 +89,20 @@
 
             // ---- Offline login path ----
             function tryOfflineLogin(username, password) {
+                var storedUser = localStorage.getItem('rb_cred_user');
+                var storedSalt = localStorage.getItem('rb_cred_salt');
+                var storedHash = localStorage.getItem('rb_cred_hash');
+                var lastLogin  = localStorage.getItem('rb_last_online_login');
+
+                alert('DIAG A — tryOfflineLogin entered\n' +
+                      'username  : ' + username + '\n' +
+                      'storedUser: ' + storedUser + '\n' +
+                      'hasSalt   : ' + (!!storedSalt) + '\n' +
+                      'hasHash   : ' + (!!storedHash) + '\n' +
+                      'lastLogin : ' + lastLogin + '\n' +
+                      'navigator.onLine: ' + navigator.onLine + '\n' +
+                      'hasCached : ' + (typeof RBAuth.hasCachedCredentials === 'function' ? RBAuth.hasCachedCredentials() : 'n/a'));
+
                 if (!RBAuth.hasCachedCredentials()) {
                     showError('You are offline and no cached credentials are available. Connect to the internet and log in once.');
                     resetButton();
@@ -111,6 +110,10 @@
                 }
 
                 RBAuth.loginOffline(username, password).then(function (result) {
+                    alert('DIAG B — loginOffline returned\n' +
+                          'ok     : ' + result.ok + '\n' +
+                          'message: ' + (result.message || '(none)'));
+
                     if (result.ok) {
                         if (navigator.vibrate) navigator.vibrate(100);
                         btnText.textContent = 'OFFLINE MODE';
@@ -119,7 +122,8 @@
                         showError(result.message || 'Offline login failed.');
                         resetButton();
                     }
-                }).catch(function () {
+                }).catch(function (e) {
+                    alert('DIAG B-ERR — loginOffline threw\n' + (e && e.message ? e.message : e));
                     showError('Offline login failed.');
                     resetButton();
                 });
@@ -147,8 +151,11 @@
                                     || err.httpStatus === 0
                                     || (err.error && /cannot reach|network|timed out/i.test(err.error));
 
+                        alert('DIAG C — online login failed\n' +
+                              'isNetErr: ' + isNetErr + '\n' +
+                              'err     : ' + JSON.stringify(err));
+
                         if (isNetErr) {
-                            console.log('[login] Network error — trying offline login');
                             tryOfflineLogin(username, password);
                         } else {
                             showError((err && err.error) || 'Login failed. Check your credentials.');
@@ -173,6 +180,10 @@
                 btn.disabled = true;
                 btnText.innerHTML = '<span class="spinner"></span>SIGNING IN...';
 
+                alert('DIAG 0 — submit\n' +
+                      'username       : ' + username + '\n' +
+                      'navigator.onLine: ' + navigator.onLine);
+
                 var deviceInfo = {
                     device_id: 'android-' + Date.now(),
                     device_name: 'Android Device',
@@ -181,7 +192,6 @@
 
                 // If already known to be offline, skip network entirely
                 if (navigator.onLine === false) {
-                    console.log('[login] Offline detected — using cached credentials');
                     tryOfflineLogin(username, password);
                     return;
                 }
