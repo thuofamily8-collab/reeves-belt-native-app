@@ -8,6 +8,9 @@
  *   - confirmEndShift() queues offline
  *   - GPS pings queue offline
  *   - Shift banner shows "(pending sync)" when queued
+ *
+ * SPRINT 2B:
+ *   - Badge refreshes live when queue drains (no need to reload)
  * ============================================================
  */
 
@@ -18,6 +21,7 @@ var RBGuardShift = (function() {
     var rollCallInterval = null;
     var pingCount = 0;
     var lastSeenRollCallId = 0;
+    var _listenerWired = false;
 
     function init() {
         if (!RBAuth.requireLogin()) return;
@@ -78,7 +82,6 @@ var RBGuardShift = (function() {
 
             OfflineSync.queueRecord('shift_start', payload);
 
-            // Local shift state begins immediately
             RBShift.start('guard', tenantId, null, Date.now());
 
             if (typeof RBApp !== 'undefined') {
@@ -99,7 +102,6 @@ var RBGuardShift = (function() {
             if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
             window.location.href = 'guard-shift.html';
         }).catch(function(err) {
-            // Server failed for any reason — queue and continue
             console.log('[guard-shift] Server call failed — queueing instead:', err);
 
             OfflineSync.queueRecord('shift_start', payload);
@@ -150,11 +152,21 @@ var RBGuardShift = (function() {
         startBatteryMonitor();
         startRollCallPolling();
         updateShiftScreenBadges();
+
+        // Refresh the badge live whenever the network changes or the
+        // queue drains — no need to close and reopen the app.
+        if (typeof RBOffline !== 'undefined' && RBOffline.on && !_listenerWired) {
+            _listenerWired = true;
+            RBOffline.on(function (evt) {
+                if (evt.type === 'synced' || evt.type === 'queued'
+                    || evt.type === 'online' || evt.type === 'offline') {
+                    updateShiftScreenBadges();
+                }
+            });
+        }
     }
 
     function updateShiftScreenBadges() {
-        // Show "(pending sync)" in the ON DUTY badge when offline shift
-        // is queued but not yet confirmed by the server
         var statusEl = document.querySelector('.shift-status');
         if (!statusEl) return;
 
@@ -166,6 +178,11 @@ var RBGuardShift = (function() {
             statusEl.style.background = 'rgba(245, 158, 11, 0.2)';
             statusEl.style.borderColor = '#f59e0b';
             statusEl.style.color = '#f59e0b';
+        } else {
+            statusEl.textContent = '● ON DUTY';
+            statusEl.style.background = 'rgba(16, 185, 129, 0.2)';
+            statusEl.style.borderColor = '#10b981';
+            statusEl.style.color = '#10b981';
         }
     }
 
@@ -257,7 +274,7 @@ var RBGuardShift = (function() {
     }
 
     // ============================================================
-    // ROLL CALL POLLING (unchanged)
+    // ROLL CALL POLLING
     // ============================================================
     function startRollCallPolling() {
         setTimeout(checkPendingRollCalls, 5000);
@@ -345,7 +362,6 @@ var RBGuardShift = (function() {
 
         var payload = { reason: 'manual' };
 
-        // Stop local timers immediately regardless of offline/online
         function teardownAndReturn() {
             if (gpsInterval) { clearInterval(gpsInterval); gpsInterval = null; }
             if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
@@ -355,7 +371,6 @@ var RBGuardShift = (function() {
             window.location.href = 'dashboard.html';
         }
 
-        // ---- Offline path ----
         if (typeof RBOffline !== 'undefined' && RBOffline.isOffline()) {
             console.log('[guard-shift] Offline — queueing END DUTY');
             OfflineSync.queueRecord('shift_end', payload);
@@ -367,11 +382,9 @@ var RBGuardShift = (function() {
             return;
         }
 
-        // ---- Online path ----
         RBApi.endStaffShift(payload).then(function() {
             teardownAndReturn();
         }).catch(function(err) {
-            // Server failed — queue and end locally
             console.log('[guard-shift] End shift failed — queueing instead:', err);
             OfflineSync.queueRecord('shift_end', payload);
             if (typeof RBApp !== 'undefined') {
