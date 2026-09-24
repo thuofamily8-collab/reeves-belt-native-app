@@ -3,11 +3,8 @@
  * REEVES BELT SECURE 360 - OFFLINE SYNC ENGINE
  * Queues records when offline, auto-syncs when online
  *
- * SPRINT 1 ADDITIONS:
- *   - RBOffline: network status bar + last-sync timestamp
- *   - Admin "force online" override
- *   - Listeners for online/offline transitions
- *   - Reuses the existing #networkBar element from dashboard.html
+ * SPRINT 1: RBOffline network bar + cached credentials
+ * SPRINT 2: shift_start / shift_end queue support
  * ============================================================
  */
 
@@ -45,6 +42,19 @@ var OfflineSync = (function() {
 
     function getQueueCount() {
         return getQueue().length;
+    }
+
+    function getQueueCountByType(type) {
+        var queue = getQueue();
+        var count = 0;
+        for (var i = 0; i < queue.length; i++) {
+            if (queue[i].type === type) count++;
+        }
+        return count;
+    }
+
+    function hasPendingType(type) {
+        return getQueueCountByType(type) > 0;
     }
 
     function syncNow() {
@@ -106,14 +116,42 @@ var OfflineSync = (function() {
     function sendToServer(record) {
         return new Promise(function(resolve, reject) {
             var endpoint = '';
+            var payload = record.data;
 
             switch (record.type) {
-                case 'vehicle_entry':    endpoint = '/camera/detect.php';    break;
-                case 'vehicle_exit':     endpoint = '/vehicle/exit.php';     break;
-                case 'visitor_checkin':  endpoint = '/visitor/checkin.php';  break;
-                case 'visitor_checkout': endpoint = '/visitor/checkout.php'; break;
-                case 'patrol_scan':      endpoint = '/patrol/scan.php';      break;
-                default: reject(new Error('Unknown record type: ' + record.type)); return;
+                case 'shift_start':
+                    endpoint = '/staff/shift-start.php';
+                    break;
+                case 'shift_end':
+                    endpoint = '/staff/shift-end.php';
+                    break;
+                case 'vehicle_entry':
+                    endpoint = '/camera/detect.php';
+                    break;
+                case 'vehicle_exit':
+                    endpoint = '/vehicle/exit.php';
+                    break;
+                case 'visitor_checkin':
+                    endpoint = '/visitor/checkin.php';
+                    break;
+                case 'visitor_checkout':
+                    endpoint = '/visitor/checkout.php';
+                    break;
+                case 'patrol_scan':
+                    endpoint = '/patrol/scan.php';
+                    break;
+                case 'staff_location':
+                    endpoint = '/staff/location.php';
+                    break;
+                default:
+                    reject(new Error('Unknown record type: ' + record.type));
+                    return;
+            }
+
+            // Attach the record's original timestamp so the server
+            // can store it as client_time / client_started_at etc.
+            if (record.created_at && !payload.client_time) {
+                payload = Object.assign({}, payload, { client_time: record.created_at });
             }
 
             var url = 'https://www.pajhub.co.ke/api/v1' + endpoint;
@@ -151,7 +189,7 @@ var OfflineSync = (function() {
             xhr.onerror = function() { reject(new Error('Network error')); };
             xhr.ontimeout = function() { reject(new Error('Timeout')); };
 
-            xhr.send(JSON.stringify(record.data));
+            xhr.send(JSON.stringify(payload));
         });
     }
 
@@ -173,15 +211,16 @@ var OfflineSync = (function() {
     return {
         queueRecord: queueRecord,
         getQueueCount: getQueueCount,
+        getQueueCountByType: getQueueCountByType,
+        hasPendingType: hasPendingType,
         syncNow: syncNow
     };
 })();
 
 
 /* ============================================================
-   RBOffline — SPRINT 1
-   Network bar, last-sync tracking, admin force-online override
-   Reuses the existing #networkBar element already in dashboard.html
+   RBOffline — network bar + last-sync tracking
+   Reuses existing #networkBar element
    ============================================================ */
 
 var RBOffline = (function () {
@@ -193,9 +232,6 @@ var RBOffline = (function () {
     var KEY_LAST_SYNC    = 'rb_last_sync';
     var KEY_FORCE_ONLINE = 'rb_force_online';
 
-    // ----------------------------------------------------------
-    // Init
-    // ----------------------------------------------------------
     function init() {
         _online = (navigator.onLine !== false);
         updateNetworkBar();
@@ -215,9 +251,6 @@ var RBOffline = (function () {
         }
     }
 
-    // ----------------------------------------------------------
-    // State
-    // ----------------------------------------------------------
     function isOnline()  { return _online; }
     function isOffline() { return !_online; }
 
@@ -228,9 +261,6 @@ var RBOffline = (function () {
         updateNetworkBar();
     }
 
-    // ----------------------------------------------------------
-    // Force online
-    // ----------------------------------------------------------
     function setForceOnline(v) {
         try {
             if (v) localStorage.setItem(KEY_FORCE_ONLINE, '1');
@@ -244,9 +274,6 @@ var RBOffline = (function () {
         catch (e) { return false; }
     }
 
-    // ----------------------------------------------------------
-    // Last sync
-    // ----------------------------------------------------------
     function getLastSync() {
         try {
             var v = localStorage.getItem(KEY_LAST_SYNC);
@@ -272,9 +299,6 @@ var RBOffline = (function () {
         return Math.floor(diff / 86400) + 'd ago';
     }
 
-    // ----------------------------------------------------------
-    // Listeners
-    // ----------------------------------------------------------
     function on(fn) { _listeners.push(fn); }
 
     function emit(evt) {
@@ -283,10 +307,6 @@ var RBOffline = (function () {
         }
     }
 
-    // ----------------------------------------------------------
-    // Network bar
-    // Reuses the existing #networkBar element from dashboard.html.
-    // ----------------------------------------------------------
     function getBar() {
         var bar = document.getElementById('networkBar');
         if (!bar) bar = document.getElementById('network-bar');
@@ -302,7 +322,6 @@ var RBOffline = (function () {
             try { pending = OfflineSync.getQueueCount(); } catch (e) { pending = 0; }
         }
 
-        // Cancel any pending hide from a previous state change
         if (_hideTimer) {
             clearTimeout(_hideTimer);
             _hideTimer = null;
@@ -313,7 +332,6 @@ var RBOffline = (function () {
             bar.textContent = '● ONLINE' +
                 (pending > 0 ? ' — ' + pending + ' pending' : '') +
                 ' — last sync ' + humanLastSync();
-            // Auto-hide after 3 seconds
             _hideTimer = setTimeout(function () {
                 var b = getBar();
                 if (b && _online) b.classList.remove('show');
@@ -326,9 +344,6 @@ var RBOffline = (function () {
         }
     }
 
-    // ----------------------------------------------------------
-    // Public
-    // ----------------------------------------------------------
     return {
         init:             init,
         isOnline:         isOnline,
