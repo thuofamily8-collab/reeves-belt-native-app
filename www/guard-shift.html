@@ -125,12 +125,39 @@
         .logout-btn-shift { background: #f59e0b; color: #fff; }
         .logout-btn-all { background: #ef4444; color: #fff; }
         .logout-btn-cancel { background: #333; color: #fff; }
+
+        /* TEMP debug UI — remove after Sprint 2 verified */
+        .rb-debug-bar {
+            position: fixed; top: 66px; left: 12px; right: 12px;
+            display: flex; align-items: center; justify-content: space-between;
+            z-index: 30; pointer-events: none;
+        }
+        .rb-debug-chip {
+            padding: 5px 12px; background: rgba(0,0,0,0.75);
+            border-radius: 12px; color: #00c6ff;
+            font-size: 11px; font-family: monospace; font-weight: 700;
+            pointer-events: auto;
+        }
+        .rb-debug-btn {
+            padding: 6px 14px; background: #00c6ff; color: #0a0e1a;
+            border: none; border-radius: 12px;
+            font-size: 11px; font-weight: 800; cursor: pointer;
+            letter-spacing: 1px; pointer-events: auto;
+            box-shadow: 0 0 12px rgba(0,198,255,0.5);
+        }
+        .rb-debug-btn:active { transform: translateY(1px); }
     </style>
 </head>
 <body>
 
 <div class="top-actions">
     <button onclick="RBGuardShift.openLogoutOptions()">🔓 LOGOUT</button>
+</div>
+
+<!-- TEMP: debug bar — remove after Sprint 2 verified -->
+<div class="rb-debug-bar">
+    <button id="rbForceSync" class="rb-debug-btn">SYNC</button>
+    <div id="rbLiveStatus" class="rb-debug-chip">Q:—</div>
 </div>
 
 <div class="shift-screen">
@@ -210,66 +237,71 @@ document.addEventListener('DOMContentLoaded', function() {
     } catch (e) {
         console.error('initShiftScreen failed:', e);
     }
-});
-</script>
 
-<script>
-// ============================================================
-// TEMP DIAGNOSTIC — remove after Sprint 2 verified
-// Shows queue state + sync status on shift screen
-// ============================================================
-setTimeout(function () {
-    var q = [];
-    try {
-        q = JSON.parse(localStorage.getItem('rb_offline_queue') || '[]');
-    } catch (e) { q = []; }
+    // ============================================================
+    // TEMP: live status chip + manual SYNC button
+    // Remove after Sprint 2 verified
+    // ============================================================
+    (function () {
+        var chip = document.getElementById('rbLiveStatus');
+        var btn  = document.getElementById('rbForceSync');
 
-    var pending = q.length;
-    var pendingShift = 0;
-    var pendingLoc = 0;
-    var maxRetries = 0;
-    var oldestType = '—';
-
-    for (var i = 0; i < q.length; i++) {
-        if (q[i].type === 'shift_start') pendingShift++;
-        if (q[i].type === 'staff_location') pendingLoc++;
-        var r = q[i].retries || 0;
-        if (r > maxRetries) maxRetries = r;
-    }
-    if (q.length > 0) oldestType = q[0].type;
-
-    var lastSyncRaw = localStorage.getItem('rb_last_sync');
-    var lastSyncTxt = 'never';
-    if (lastSyncRaw) {
-        try {
-            lastSyncTxt = new Date(parseInt(lastSyncRaw, 10)).toLocaleTimeString();
-        } catch (e) {}
-    }
-
-    var token = localStorage.getItem('rb_token');
-    var lines = [];
-    lines.push('ONLINE       : ' + navigator.onLine);
-    lines.push('TOKEN        : ' + (token ? 'present' : 'MISSING'));
-    lines.push('');
-    lines.push('QUEUE TOTAL  : ' + pending);
-    lines.push('  shift_start: ' + pendingShift);
-    lines.push('  staff_loc  : ' + pendingLoc);
-    lines.push('  max retries: ' + maxRetries);
-    lines.push('  oldest type: ' + oldestType);
-    lines.push('');
-    lines.push('LAST SYNC    : ' + lastSyncTxt);
-    lines.push('DUTY BADGE   : ' + (typeof RBShift !== 'undefined' && RBShift.isPendingSync && RBShift.isPendingSync() ? 'PENDING' : 'CLEAN'));
-
-    if (q.length > 0 && q.length <= 5) {
-        lines.push('');
-        lines.push('--- FULL QUEUE ---');
-        for (var j = 0; j < q.length; j++) {
-            lines.push((j + 1) + '. ' + q[j].type + ' | retries=' + (q[j].retries || 0));
+        function tick() {
+            if (!chip) return;
+            var q = [];
+            try { q = JSON.parse(localStorage.getItem('rb_offline_queue') || '[]'); } catch (e) {}
+            var shiftQ = 0;
+            for (var i = 0; i < q.length; i++) {
+                if (q[i].type === 'shift_start') shiftQ++;
+            }
+            var online = navigator.onLine ? '1' : '0';
+            var badge = 'CLEAN';
+            if (typeof RBShift !== 'undefined' && RBShift.isPendingSync && RBShift.isPendingSync()) {
+                badge = 'PEND';
+            }
+            chip.textContent = 'Q:' + q.length + ' s:' + shiftQ + ' on:' + online + ' ' + badge;
         }
-    }
 
-    alert(lines.join('\n'));
-}, 3000);
+        tick();
+        setInterval(tick, 1000);
+
+        if (typeof RBOffline !== 'undefined' && RBOffline.on) {
+            RBOffline.on(function () { tick(); });
+        }
+
+        if (btn) {
+            btn.addEventListener('click', function () {
+                if (typeof OfflineSync === 'undefined') {
+                    alert('OfflineSync module not loaded');
+                    return;
+                }
+
+                btn.disabled = true;
+                btn.textContent = '...';
+
+                OfflineSync.syncNow().then(function (r) {
+                    btn.disabled = false;
+                    btn.textContent = 'SYNC';
+                    tick();
+
+                    alert(
+                        'Sync result\n' +
+                        '─────────────\n' +
+                        'online  : ' + navigator.onLine + '\n' +
+                        'synced  : ' + r.synced + '\n' +
+                        'failed  : ' + r.failed + '\n' +
+                        'message : ' + (r.message || '(none)') + '\n' +
+                        'queue   : ' + (typeof OfflineSync.getQueueCount === 'function' ? OfflineSync.getQueueCount() : '?')
+                    );
+                }).catch(function (e) {
+                    btn.disabled = false;
+                    btn.textContent = 'SYNC';
+                    alert('Sync threw: ' + (e && e.message ? e.message : e));
+                });
+            });
+        }
+    })();
+});
 </script>
 
 </body>
