@@ -6,10 +6,58 @@
  *   startNetworkMonitor() now defers to RBOffline when available.
  *   Legacy inline behavior retained as fallback for pages that
  *   don't load offline.js.
+ *
+ * SPRINT 2:
+ *   Hardware back button is intercepted — never routes to login.html.
  * ============================================================
  */
 
 var RBApp = (function() {
+
+    // ============================================================
+    // BACK BUTTON ROUTING
+    // ============================================================
+    // Android hardware back button: never let it pop to login.html.
+    // Route based on the current page and user role.
+    function initBackButton() {
+        if (!window.Capacitor || !Capacitor.Plugins || !Capacitor.Plugins.App) return;
+
+        Capacitor.Plugins.App.addListener('backButton', function (evt) {
+            var path = window.location.pathname || '';
+            var file = path.substring(path.lastIndexOf('/') + 1);
+
+            console.log('[backButton] pressed on', file);
+
+            // ---------- Login screen ----------
+            if (file === 'login.html' || file === '' || file === 'index.html') {
+                Capacitor.Plugins.App.exitApp();
+                return;
+            }
+
+            // ---------- Role landing pages ----------
+            var isSupervisor = (typeof RBAuth !== 'undefined'
+                             && RBAuth.isSupervisor
+                             && RBAuth.isSupervisor());
+
+            if (file === 'dashboard.html') {
+                Capacitor.Plugins.App.exitApp();
+                return;
+            }
+
+            if (file === 'supervisor.html') {
+                Capacitor.Plugins.App.exitApp();
+                return;
+            }
+
+            if (file === 'guard-shift.html' || file === 'supervisor-shift.html') {
+                window.location.href = isSupervisor ? 'supervisor.html' : 'dashboard.html';
+                return;
+            }
+
+            // ---------- Any other inner page → go home ----------
+            window.location.href = isSupervisor ? 'supervisor.html' : 'dashboard.html';
+        });
+    }
 
     // ============================================================
     // TOAST NOTIFICATIONS
@@ -177,6 +225,20 @@ var RBApp = (function() {
         if (navigator.vibrate) navigator.vibrate(30);
     }
 
+    // ============================================================
+    // AUTO-INIT
+    // ============================================================
+    // Wire the back button as soon as app.js loads — every page
+    // that includes this file gets the fix automatically.
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initBackButton);
+    } else {
+        initBackButton();
+    }
+
+    // ============================================================
+    // PUBLIC API
+    // ============================================================
     return {
         showToast: showToast,
         confirmLogout: confirmLogout,
@@ -186,7 +248,8 @@ var RBApp = (function() {
         escapeHtml: escapeHtml,
         formatNumber: formatNumber,
         startNetworkMonitor: startNetworkMonitor,
-        comingSoon: comingSoon
+        comingSoon: comingSoon,
+        initBackButton: initBackButton
     };
 })();
 
