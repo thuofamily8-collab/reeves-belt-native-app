@@ -6,6 +6,7 @@
  *   - Offline login using cached credentials
  *   - 14-day offline validity window
  *   - Password hashed with SHA-256 + random salt
+ *   - Session snapshot restored on offline login
  * ============================================================
  */
 
@@ -24,10 +25,11 @@ var RBAuth = (function() {
     var K_EXPIRES_AT   = 'rb_expires_at';
 
     // ---------- Offline credential keys ----------
-    var K_SALT       = 'rb_cred_salt';
-    var K_HASH       = 'rb_cred_hash';
-    var K_CRED_USER  = 'rb_cred_user';
-    var K_LAST_LOGIN = 'rb_last_online_login';
+    var K_SALT            = 'rb_cred_salt';
+    var K_HASH            = 'rb_cred_hash';
+    var K_CRED_USER       = 'rb_cred_user';
+    var K_LAST_LOGIN      = 'rb_last_online_login';
+    var K_OFFLINE_SESSION = 'rb_offline_session';
 
     // ============================================================
     // SESSION
@@ -84,6 +86,19 @@ var RBAuth = (function() {
         localStorage.setItem(K_PERMISSIONS, JSON.stringify(data.permissions || []));
         localStorage.setItem(K_EXPIRES_AT, data.expires_at || '');
         localStorage.setItem(K_LAST_LOGIN, String(Date.now()));
+
+        // Snapshot the entire session for offline reuse
+        try {
+            var snapshot = {
+                token:        data.token,
+                user:         data.user,
+                tenant_name:  data.tenant_name || '',
+                permissions:  data.permissions || [],
+                expires_at:   data.expires_at || '',
+                saved_at:     Date.now()
+            };
+            localStorage.setItem(K_OFFLINE_SESSION, JSON.stringify(snapshot));
+        } catch (e) { /* ignore */ }
 
         if (window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.Preferences) {
             var P = Capacitor.Plugins.Preferences;
@@ -158,7 +173,6 @@ var RBAuth = (function() {
                 return hex;
             });
         }
-        // Fallback for ancient WebViews (should never hit on Android 7+)
         return Promise.resolve('plain:' + str);
     }
 
@@ -166,10 +180,6 @@ var RBAuth = (function() {
         return sha256Hex(salt + '|' + password);
     }
 
-    /**
-     * Cache credentials after a successful ONLINE login.
-     * Enables offline login later.
-     */
     function cacheCredentials(username, password) {
         var salt = randomSalt();
         return hashPassword(password, salt).then(function (hash) {
@@ -183,28 +193,42 @@ var RBAuth = (function() {
     }
 
     function hasCachedCredentials() {
-        return !!(localStorage.getItem(K_SALT) && localStorage.getItem(K_HASH));
+        return !!(localStorage.getItem(K_SALT)
+               && localStorage.getItem(K_HASH)
+               && localStorage.getItem(K_OFFLINE_SESSION));
     }
 
     function clearCachedCredentials() {
         localStorage.removeItem(K_SALT);
         localStorage.removeItem(K_HASH);
         localStorage.removeItem(K_CRED_USER);
+        localStorage.removeItem(K_OFFLINE_SESSION);
     }
 
     /**
      * Try to log in offline using cached credentials.
+     * On success, restores the last-known session snapshot
+     * so the rest of the app behaves identically to an online login.
+     *
      * Returns a Promise resolving to { ok, message? }
      */
     function loginOffline(username, password) {
         var storedSalt = localStorage.getItem(K_SALT);
         var storedHash = localStorage.getItem(K_HASH);
         var storedUser = localStorage.getItem(K_CRED_USER);
+        var snapshotRaw = localStorage.getItem(K_OFFLINE_SESSION);
 
         if (!storedSalt || !storedHash || !storedUser) {
             return Promise.resolve({
                 ok: false,
                 message: 'No offline credentials cached. Please connect and log in once.'
+            });
+        }
+
+        if (!snapshotRaw) {
+            return Promise.resolve({
+                ok: false,
+                message: 'No offline session available. Connect and log in once.'
             });
         }
 
@@ -221,10 +245,35 @@ var RBAuth = (function() {
         }
 
         return hashPassword(password, storedSalt).then(function (attempt) {
-            if (attempt === storedHash) {
-                return { ok: true };
+            if (attempt !== storedHash) {
+                return { ok: false, message: 'Invalid credentials.' };
             }
-            return { ok: false, message: 'Invalid credentials.' };
+
+            // ---- Restore the session snapshot ----
+            var snapshot;
+            try {
+                snapshot = JSON.parse(snapshotRaw);
+            } catch (e) {
+                return { ok: false, message: 'Offline session is corrupt. Connect and log in once.' };
+            }
+
+            if (!snapshot || !snapshot.token || !snapshot.user) {
+                return { ok: false, message: 'Offline session incomplete. Connect and log in once.' };
+            }
+
+            // Rehydrate the normal session keys so the rest of the app works
+            try {
+                localStorage.setItem(K_TOKEN, snapshot.token);
+                localStorage.setItem(K_USER, JSON.stringify(snapshot.user));
+                localStorage.setItem(K_TENANT_ID, snapshot.user.tenant_id || '');
+                localStorage.setItem(K_TENANT_NAME, snapshot.tenant_name || '');
+                localStorage.setItem(K_PERMISSIONS, JSON.stringify(snapshot.permissions || []));
+                localStorage.setItem(K_EXPIRES_AT, snapshot.expires_at || '');
+            } catch (e) {
+                return { ok: false, message: 'Could not restore session. Try again.' };
+            }
+
+            return { ok: true };
         });
     }
 
