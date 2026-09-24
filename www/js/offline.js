@@ -5,6 +5,7 @@
  *
  * SPRINT 1: RBOffline network bar + cached credentials
  * SPRINT 2: shift_start / shift_end queue support
+ * STYLE:    concise network bar text
  * ============================================================
  */
 
@@ -329,18 +330,16 @@ var RBOffline = (function () {
 
         if (_online) {
             bar.className = 'network-bar online show';
-            bar.textContent = '● ONLINE' +
-                (pending > 0 ? ' — ' + pending + ' pending' : '') +
-                ' — last sync ' + humanLastSync();
+            bar.textContent = '● Online' +
+                (pending > 0 ? ' — ' + pending + ' pending' : '');
             _hideTimer = setTimeout(function () {
                 var b = getBar();
                 if (b && _online) b.classList.remove('show');
             }, 3000);
         } else {
             bar.className = 'network-bar offline show';
-            bar.textContent = '⚠ NO INTERNET — Working offline' +
-                (pending > 0 ? ' (' + pending + ' pending)' : '') +
-                '. Changes will sync when online.';
+            bar.textContent = '⚠ Working Offline' +
+                (pending > 0 ? ' — ' + pending + ' queued' : '');
         }
     }
 
