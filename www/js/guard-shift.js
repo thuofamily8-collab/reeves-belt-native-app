@@ -2,6 +2,12 @@
  * ============================================================
  * REEVES BELT APP - GUARD SHIFT MODULE
  * Start/end shift + GPS pings + roll call polling
+ *
+ * SPRINT 2:
+ *   - startShift() queues offline instead of failing
+ *   - confirmEndShift() queues offline
+ *   - GPS pings queue offline
+ *   - Shift banner shows "(pending sync)" when queued
  * ============================================================
  */
 
@@ -36,6 +42,9 @@ var RBGuardShift = (function() {
         if (tenantEl) tenantEl.textContent = RBAuth.getTenantName();
     }
 
+    // ============================================================
+    // START SHIFT (offline-capable)
+    // ============================================================
     function startShift() {
         if (!confirm('Start your shift?\n\nYour attendance and location will be logged.')) return;
 
@@ -46,29 +55,65 @@ var RBGuardShift = (function() {
             }
 
             navigator.geolocation.getCurrentPosition(function(pos) {
-                var payload = {
-                    latitude: pos.coords.latitude,
-                    longitude: pos.coords.longitude,
-                    device_info: navigator.userAgent.substring(0, 200)
-                };
-
-                RBApi.startStaffShift(payload).then(function(res) {
-                    RBShift.start('guard', res.tenant_id, res.session_id, Date.now());
-                    if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-                    window.location.href = 'guard-shift.html';
-                }).catch(function(err) {
-                    alert('Failed to start shift: ' + (err.error || 'network error'));
-                });
+                doStartShift(pos.coords.latitude, pos.coords.longitude);
             }, function() {
-                RBApi.startStaffShift({ device_info: navigator.userAgent.substring(0, 200) })
-                    .then(function(res) {
-                        RBShift.start('guard', res.tenant_id, res.session_id, Date.now());
-                        window.location.href = 'guard-shift.html';
-                    })
-                    .catch(function(err) {
-                        alert('Failed: ' + (err.error || 'network error'));
-                    });
+                doStartShift(null, null);
             }, { enableHighAccuracy: true, timeout: 10000 });
+        });
+    }
+
+    function doStartShift(lat, lng) {
+        var payload = {
+            latitude:    lat,
+            longitude:   lng,
+            device_info: navigator.userAgent.substring(0, 200)
+        };
+
+        var user = RBAuth.getCurrentUser();
+        var tenantId = user ? user.tenant_id : null;
+
+        // ---- Offline path: queue and go straight to shift screen ----
+        if (typeof RBOffline !== 'undefined' && RBOffline.isOffline()) {
+            console.log('[guard-shift] Offline — queueing START DUTY');
+
+            OfflineSync.queueRecord('shift_start', payload);
+
+            // Local shift state begins immediately
+            RBShift.start('guard', tenantId, null, Date.now());
+
+            if (typeof RBApp !== 'undefined') {
+                RBApp.showToast('Shift started offline — will sync when online', 'warning');
+            }
+
+            if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+
+            setTimeout(function() {
+                window.location.href = 'guard-shift.html';
+            }, 800);
+            return;
+        }
+
+        // ---- Online path ----
+        RBApi.startStaffShift(payload).then(function(res) {
+            RBShift.start('guard', res.tenant_id, res.session_id, Date.now());
+            if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+            window.location.href = 'guard-shift.html';
+        }).catch(function(err) {
+            // Server failed for any reason — queue and continue
+            console.log('[guard-shift] Server call failed — queueing instead:', err);
+
+            OfflineSync.queueRecord('shift_start', payload);
+            RBShift.start('guard', tenantId, null, Date.now());
+
+            if (typeof RBApp !== 'undefined') {
+                RBApp.showToast('Server unreachable — shift queued', 'warning');
+            }
+
+            if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+
+            setTimeout(function() {
+                window.location.href = 'guard-shift.html';
+            }, 800);
         });
     }
 
@@ -104,6 +149,24 @@ var RBGuardShift = (function() {
         startGPSPings();
         startBatteryMonitor();
         startRollCallPolling();
+        updateShiftScreenBadges();
+    }
+
+    function updateShiftScreenBadges() {
+        // Show "(pending sync)" in the ON DUTY badge when offline shift
+        // is queued but not yet confirmed by the server
+        var statusEl = document.querySelector('.shift-status');
+        if (!statusEl) return;
+
+        var pending = typeof OfflineSync !== 'undefined'
+            && OfflineSync.hasPendingType('shift_start');
+
+        if (pending) {
+            statusEl.textContent = '● ON DUTY (pending sync)';
+            statusEl.style.background = 'rgba(245, 158, 11, 0.2)';
+            statusEl.style.borderColor = '#f59e0b';
+            statusEl.style.color = '#f59e0b';
+        }
     }
 
     function startTimer() {
@@ -132,15 +195,29 @@ var RBGuardShift = (function() {
 
         navigator.geolocation.getCurrentPosition(function(pos) {
             setGPSStatus('green', '● Active');
+
             var payload = {
-                latitude: pos.coords.latitude,
-                longitude: pos.coords.longitude,
-                accuracy_m: pos.coords.accuracy,
-                speed_kmh: pos.coords.speed !== null && pos.coords.speed !== undefined ? pos.coords.speed * 3.6 : null,
+                latitude:    pos.coords.latitude,
+                longitude:   pos.coords.longitude,
+                accuracy_m:  pos.coords.accuracy,
+                speed_kmh:   pos.coords.speed !== null && pos.coords.speed !== undefined ? pos.coords.speed * 3.6 : null,
                 heading_deg: pos.coords.heading,
                 battery_pct: getBatteryPct()
             };
 
+            // ---- Offline: queue the ping ----
+            if (typeof RBOffline !== 'undefined' && RBOffline.isOffline()) {
+                OfflineSync.queueRecord('staff_location', payload);
+                pingCount++;
+                var elOff = document.getElementById('pingCount');
+                if (elOff) elOff.textContent = pingCount;
+                var lpOff = document.getElementById('lastPing');
+                if (lpOff) lpOff.textContent = formatNow();
+                setGPSStatus('yellow', '● Offline');
+                return;
+            }
+
+            // ---- Online: send directly ----
             RBApi.sendStaffLocation(payload).then(function() {
                 pingCount++;
                 var el = document.getElementById('pingCount');
@@ -148,7 +225,8 @@ var RBGuardShift = (function() {
                 var lp = document.getElementById('lastPing');
                 if (lp) lp.textContent = formatNow();
             }).catch(function(err) {
-                console.log('Ping failed:', err);
+                console.log('Ping failed — queueing:', err);
+                OfflineSync.queueRecord('staff_location', payload);
                 setGPSStatus('yellow', '● Offline');
             });
         }, function(err) {
@@ -179,7 +257,7 @@ var RBGuardShift = (function() {
     }
 
     // ============================================================
-    // ROLL CALL POLLING
+    // ROLL CALL POLLING (unchanged)
     // ============================================================
     function startRollCallPolling() {
         setTimeout(checkPendingRollCalls, 5000);
@@ -188,6 +266,8 @@ var RBGuardShift = (function() {
     }
 
     function checkPendingRollCalls() {
+        if (typeof RBOffline !== 'undefined' && RBOffline.isOffline()) return;
+
         RBApi.getPendingRollCalls().then(function(res) {
             if (res.count > 0) {
                 var rc = res.roll_calls[0];
@@ -236,7 +316,7 @@ var RBGuardShift = (function() {
     }
 
     // ============================================================
-    // END SHIFT
+    // END SHIFT (offline-capable)
     // ============================================================
     function requestEndShift() {
         var modal = document.getElementById('pinModal');
@@ -263,16 +343,41 @@ var RBGuardShift = (function() {
             return;
         }
 
-        RBApi.endStaffShift({ reason: 'manual' }).then(function() {
-            RBShift.end();
+        var payload = { reason: 'manual' };
+
+        // Stop local timers immediately regardless of offline/online
+        function teardownAndReturn() {
             if (gpsInterval) { clearInterval(gpsInterval); gpsInterval = null; }
             if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
             if (rollCallInterval) { clearInterval(rollCallInterval); rollCallInterval = null; }
+            RBShift.end();
             if (navigator.vibrate) navigator.vibrate(200);
             window.location.href = 'dashboard.html';
-        }).catch(function() {
-            RBShift.end();
-            window.location.href = 'dashboard.html';
+        }
+
+        // ---- Offline path ----
+        if (typeof RBOffline !== 'undefined' && RBOffline.isOffline()) {
+            console.log('[guard-shift] Offline — queueing END DUTY');
+            OfflineSync.queueRecord('shift_end', payload);
+
+            if (typeof RBApp !== 'undefined') {
+                RBApp.showToast('Shift end queued — will sync when online', 'warning');
+            }
+            teardownAndReturn();
+            return;
+        }
+
+        // ---- Online path ----
+        RBApi.endStaffShift(payload).then(function() {
+            teardownAndReturn();
+        }).catch(function(err) {
+            // Server failed — queue and end locally
+            console.log('[guard-shift] End shift failed — queueing instead:', err);
+            OfflineSync.queueRecord('shift_end', payload);
+            if (typeof RBApp !== 'undefined') {
+                RBApp.showToast('Shift end queued', 'warning');
+            }
+            teardownAndReturn();
         });
     }
 
@@ -297,11 +402,26 @@ var RBGuardShift = (function() {
 
     function logoutEndShift() {
         if (!confirm('End shift and logout?')) return;
-        RBApi.endStaffShift({ reason: 'logout' }).catch(function() {});
-        RBShift.end();
-        RBApi.logout().then(function() {}).catch(function() {}).then(function() {
-            RBAuth.clearSession();
-            window.location.href = 'login.html';
+
+        var payload = { reason: 'logout' };
+
+        function finish() {
+            RBShift.end();
+            RBApi.logout().then(function() {}).catch(function() {}).then(function() {
+                RBAuth.clearSession();
+                window.location.href = 'login.html';
+            });
+        }
+
+        if (typeof RBOffline !== 'undefined' && RBOffline.isOffline()) {
+            OfflineSync.queueRecord('shift_end', payload);
+            finish();
+            return;
+        }
+
+        RBApi.endStaffShift(payload).then(finish).catch(function() {
+            OfflineSync.queueRecord('shift_end', payload);
+            finish();
         });
     }
 
