@@ -3,12 +3,12 @@
  * REEVES BELT APP - Patrol Module
  * QR scanning, checkpoint tracking, offline sync
  *
- * SPRINT 2:
- *   - submitPatrolScan() only calls API when online
- *   - Offline → queue only, no error toast
- *
- * SPRINT 2C:
- *   - Faster QR scan: lower resolution, 60ms interval, 2-pass
+ * SPRINT 2D:
+ *   - Fullscreen scanner overlay
+ *   - Native BarcodeDetector when available (10x faster)
+ *   - jsQR fallback with full-frame scan
+ *   - Auto-restart after successful scan
+ *   - Instant success flash + beep + vibrate
  * ============================================================
  */
 
@@ -22,6 +22,10 @@ var currentGPS = { lat: null, lng: null };
 var lastDetectedCode = '';
 var lastDetectedAt = 0;
 
+// Native BarcodeDetector (available on Chrome 83+)
+var _barcodeDetector = null;
+var _useNative = false;
+
 // ============================================================
 // INIT
 // ============================================================
@@ -29,6 +33,33 @@ document.addEventListener('DOMContentLoaded', function() {
     loadLocalScannedCheckpoints();
     loadCheckpoints();
     requestLocationSilently();
+
+    // Detect native BarcodeDetector support
+    if (typeof BarcodeDetector !== 'undefined') {
+        try {
+            if (typeof BarcodeDetector.getSupportedFormats === 'function') {
+                BarcodeDetector.getSupportedFormats().then(function(formats) {
+                    if (formats.indexOf('qr_code') !== -1) {
+                        _barcodeDetector = new BarcodeDetector({ formats: ['qr_code'] });
+                        _useNative = true;
+                        console.log('[patrol] BarcodeDetector native support enabled');
+                    } else {
+                        console.log('[patrol] qr_code not supported by BarcodeDetector — using jsQR');
+                    }
+                }).catch(function() {
+                    console.log('[patrol] BarcodeDetector format check failed — using jsQR');
+                });
+            } else {
+                _barcodeDetector = new BarcodeDetector({ formats: ['qr_code'] });
+                _useNative = true;
+                console.log('[patrol] BarcodeDetector enabled');
+            }
+        } catch (e) {
+            console.log('[patrol] BarcodeDetector init failed — using jsQR', e);
+        }
+    } else {
+        console.log('[patrol] No BarcodeDetector — using jsQR');
+    }
 });
 
 function requestLocationSilently() {
@@ -152,11 +183,13 @@ function updateProgress() {
     var scannedEl = document.getElementById('scannedCount');
     var totalEl = document.getElementById('totalCount');
     var remainingEl = document.getElementById('remainingCount');
+    var fillEl = document.getElementById('progressFill');
 
     if (percentEl) percentEl.textContent = percent + '%';
     if (scannedEl) scannedEl.textContent = scanned;
     if (totalEl) totalEl.textContent = total;
     if (remainingEl) remainingEl.textContent = total - scanned;
+    if (fillEl) fillEl.style.width = percent + '%';
 }
 
 // ============================================================
@@ -185,7 +218,7 @@ function requireShiftOrPrompt(action) {
 }
 
 // ============================================================
-// QR SCANNER — OPTIMIZED
+// FULLSCREEN SCANNER
 // ============================================================
 function startScanner() {
     if (!requireShiftOrPrompt('scanning checkpoints')) return;
@@ -196,38 +229,52 @@ function startScanner() {
                 showToast('Camera permission denied. Enable it in Settings → Apps → Reeves Belt App → Permissions.', 'error');
                 return;
             }
-            actuallyStartScanner();
+            openFullscreenScanner();
         });
     } else {
-        actuallyStartScanner();
+        openFullscreenScanner();
     }
 }
 
+function openFullscreenScanner() {
+    var overlay = document.getElementById('rbScannerOverlay');
+    if (!overlay) {
+        showToast('Scanner UI not available', 'error');
+        return;
+    }
+
+    overlay.classList.add('show');
+
+    // Hide success flash on entry
+    var flash = document.getElementById('rbScannerFlash');
+    if (flash) flash.classList.remove('show');
+
+    actuallyStartScanner();
+}
+
 function actuallyStartScanner() {
-    var video = document.getElementById('qrVideo');
-    var placeholder = document.getElementById('scannerPlaceholder');
-    var frame = document.getElementById('scannerFrame');
-    var startBtn = document.getElementById('startScanBtn');
-    var stopBtn = document.getElementById('stopScanBtn');
+    var video = document.getElementById('rbScannerVideo');
+    if (!video) return;
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         showToast('Camera not supported on this device', 'error');
         return;
     }
 
-    if (typeof jsQR === 'undefined') {
+    // jsQR must be present for the fallback path
+    if (!_useNative && typeof jsQR === 'undefined') {
         showToast('QR library not loaded', 'error');
         return;
     }
 
-    // OPTIMIZED: 1280x720 instead of 1920x1080 — 2.7x less data per frame.
-    // QR resolution at this size is still far more than jsQR needs.
+    // Full HD is fine here — with native detector it's instant,
+    // with jsQR we down-sample by cropping the center.
     var constraints = {
         audio: false,
         video: {
             facingMode: { ideal: 'environment' },
-            width:  { ideal: 1280, min: 640 },
-            height: { ideal: 720,  min: 480 },
+            width:  { ideal: 1280 },
+            height: { ideal: 720 },
             focusMode: 'continuous'
         }
     };
@@ -236,15 +283,9 @@ function actuallyStartScanner() {
     .then(function(stream) {
         qrStream = stream;
         video.srcObject = stream;
-        video.style.display = 'block';
         video.setAttribute('playsinline', 'true');
         video.setAttribute('autoplay', 'true');
         video.setAttribute('muted', 'true');
-
-        placeholder.style.display = 'none';
-        frame.style.display = 'block';
-        startBtn.disabled = true;
-        stopBtn.disabled = false;
 
         try {
             var track = stream.getVideoTracks()[0];
@@ -254,109 +295,178 @@ function actuallyStartScanner() {
                 advanced.push({ focusMode: 'continuous' });
             }
             if (advanced.length > 0) track.applyConstraints({ advanced: advanced });
-        } catch (e) { console.log('Autofocus hint failed:', e); }
+        } catch (e) { /* ignore */ }
 
         video.onloadedmetadata = function() {
             video.play().catch(function() {});
-            setTimeout(function() {
-                // OPTIMIZED: 60ms instead of 100ms — more attempts, each faster
-                qrScanInterval = setInterval(scanQRFrame, 60);
-            }, 300);
+
+            // Two scan loops: native uses frames from the video element,
+            // jsQR uses a canvas at 60ms intervals
+            if (_useNative && _barcodeDetector) {
+                startNativeScanLoop(video);
+            } else {
+                startJsQrScanLoop(video);
+            }
         };
     })
     .catch(function(err) {
         showToast('Camera error: ' + err.message, 'error');
+        stopScanner();
     });
 }
 
-function scanQRFrame() {
-    var video = document.getElementById('qrVideo');
-    if (!video) return;
-    if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
-    if (video.videoWidth === 0 || video.videoHeight === 0) return;
+// -------- Native BarcodeDetector loop --------
+function startNativeScanLoop(video) {
+    var busy = false;
 
-    scanCanvas.width = video.videoWidth;
-    scanCanvas.height = video.videoHeight;
-    scanCanvasContext.drawImage(video, 0, 0, scanCanvas.width, scanCanvas.height);
+    function tick() {
+        if (!qrStream) return;
 
-    var code = null;
+        if (!busy && video.readyState === video.HAVE_ENOUGH_DATA) {
+            busy = true;
 
-    // Pass 1: cropped center (best chance — user aims at the QR)
-    try {
-        var cropW = Math.floor(scanCanvas.width * 0.75);
-        var cropH = Math.floor(scanCanvas.height * 0.75);
-        var cropX = Math.floor((scanCanvas.width - cropW) / 2);
-        var cropY = Math.floor((scanCanvas.height - cropH) / 2);
-        var imageData = scanCanvasContext.getImageData(cropX, cropY, cropW, cropH);
-        code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' });
-    } catch (e) { /* ignore */ }
+            _barcodeDetector.detect(video)
+                .then(function(codes) {
+                    busy = false;
+                    if (codes && codes.length > 0) {
+                        var text = codes[0].rawValue;
+                        if (text) handleQRDetected(text);
+                    }
+                })
+                .catch(function() {
+                    busy = false;
+                });
+        }
 
-    // Pass 2: full frame (fallback if the QR is off-center)
-    if (!code) {
-        try {
-            var fullData = scanCanvasContext.getImageData(0, 0, scanCanvas.width, scanCanvas.height);
-            code = jsQR(fullData.data, fullData.width, fullData.height, { inversionAttempts: 'dontInvert' });
-        } catch (e) { /* ignore */ }
+        qrScanInterval = setTimeout(tick, 80);
     }
 
-    if (code && code.data) handleQRDetected(code.data);
+    tick();
+}
+
+// -------- jsQR fallback loop --------
+function startJsQrScanLoop(video) {
+    function tick() {
+        if (!qrStream) return;
+
+        if (video.readyState === video.HAVE_ENOUGH_DATA &&
+            video.videoWidth > 0 && video.videoHeight > 0) {
+
+            // Downsample: 480 wide is plenty for QR detection and fast
+            var targetW = 480;
+            var scale = targetW / video.videoWidth;
+            var targetH = Math.floor(video.videoHeight * scale);
+
+            scanCanvas.width = targetW;
+            scanCanvas.height = targetH;
+            scanCanvasContext.drawImage(video, 0, 0, targetW, targetH);
+
+            var imageData = scanCanvasContext.getImageData(0, 0, targetW, targetH);
+            var code = jsQR(imageData.data, imageData.width, imageData.height, {
+                inversionAttempts: 'dontInvert'
+            });
+
+            if (code && code.data) {
+                handleQRDetected(code.data);
+                return;
+            }
+        }
+
+        qrScanInterval = setTimeout(tick, 60);
+    }
+
+    tick();
 }
 
 function handleQRDetected(qrData) {
     var now = Date.now();
-    if (qrData === lastDetectedCode && (now - lastDetectedAt) < 2000) return;
+    if (qrData === lastDetectedCode && (now - lastDetectedAt) < 2500) return;
     lastDetectedCode = qrData;
     lastDetectedAt = now;
 
-    stopScanner();
+    // Freeze the video to prevent duplicate reads
+    if (qrScanInterval) {
+        clearInterval(qrScanInterval);
+        clearTimeout(qrScanInterval);
+        qrScanInterval = null;
+    }
+
     if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
     playBeep();
 
-    var matchedCheckpoint = matchCheckpoint(qrData);
-    var resultBox = document.getElementById('scanResult');
-    if (resultBox) resultBox.style.display = 'block';
+    var matched = matchCheckpoint(qrData);
 
-    if (matchedCheckpoint) {
-        var successText = document.getElementById('scanSuccessText');
-        if (successText) successText.textContent = '✓ ' + matchedCheckpoint.point_name + ' - Logging...';
+    if (matched) {
+        // Show big green success flash
+        showFlash(matched.point_name);
+
         setTimeout(function() {
-            submitPatrolScan(matchedCheckpoint.point_name, qrData);
-        }, 300);
+            submitPatrolScan(matched.point_name, qrData);
+        }, 600);
     } else {
-        var successText2 = document.getElementById('scanSuccessText');
-        if (successText2) successText2.textContent = '⚠ QR not recognized: ' + qrData;
-        var successBox = document.getElementById('scanSuccess');
-        if (successBox) successBox.style.background = 'rgba(245, 158, 11, 0.2)';
-        showToast('QR code not recognized', 'warning');
+        // Unrecognized QR — show a toast and restart scanning
+        showToast('QR not recognized: ' + qrData, 'warning');
+        setTimeout(restartScanning, 1200);
     }
+}
+
+function showFlash(checkpointName) {
+    var flash = document.getElementById('rbScannerFlash');
+    var nameEl = document.getElementById('rbFlashCheckpoint');
+    if (nameEl) nameEl.textContent = checkpointName || '';
+    if (flash) flash.classList.add('show');
+}
+
+function hideFlash() {
+    var flash = document.getElementById('rbScannerFlash');
+    if (flash) flash.classList.remove('show');
 }
 
 function matchCheckpoint(qrData) {
     for (var i = 0; i < checkpoints.length; i++) {
         var cp = checkpoints[i];
-        if (cp.point_name === qrData || cp.qr_code === qrData || String(cp.id) === String(qrData)) {
+        if (cp.point_name === qrData ||
+            cp.qr_code === qrData ||
+            String(cp.id) === String(qrData)) {
             return cp;
         }
     }
     return null;
 }
 
+function restartScanning() {
+    hideFlash();
+    if (!qrStream) return;
+
+    var video = document.getElementById('rbScannerVideo');
+    if (!video) return;
+
+    if (_useNative && _barcodeDetector) {
+        startNativeScanLoop(video);
+    } else {
+        startJsQrScanLoop(video);
+    }
+}
+
 function stopScanner() {
-    if (qrScanInterval) { clearInterval(qrScanInterval); qrScanInterval = null; }
+    if (qrScanInterval) {
+        clearInterval(qrScanInterval);
+        clearTimeout(qrScanInterval);
+        qrScanInterval = null;
+    }
+
     if (qrStream) {
         qrStream.getTracks().forEach(function(t) { t.stop(); });
         qrStream = null;
     }
-    var video = document.getElementById('qrVideo');
-    var placeholder = document.getElementById('scannerPlaceholder');
-    var frame = document.getElementById('scannerFrame');
-    var startBtn = document.getElementById('startScanBtn');
-    var stopBtn = document.getElementById('stopScanBtn');
-    if (video) video.style.display = 'none';
-    if (placeholder) placeholder.style.display = 'block';
-    if (frame) frame.style.display = 'none';
-    if (startBtn) startBtn.disabled = false;
-    if (stopBtn) stopBtn.disabled = true;
+
+    hideFlash();
+
+    var overlay = document.getElementById('rbScannerOverlay');
+    if (overlay) overlay.classList.remove('show');
+
+    var video = document.getElementById('rbScannerVideo');
+    if (video) video.srcObject = null;
 }
 
 // ============================================================
@@ -385,25 +495,25 @@ function submitPatrolScan(checkpointName, qrData) {
         renderCheckpoints();
         renderManualSelect();
         updateProgress();
-        setTimeout(function() {
-            var box = document.getElementById('scanResult');
-            if (box) box.style.display = 'none';
-        }, 3000);
     }
 
     if (online) {
         RBApi.logPatrolScan(data).then(function() {
             markLocalSuccess();
             showToast('✓ ' + checkpointName + ' logged', 'success');
+            // Auto-restart after a short delay
+            setTimeout(restartScanning, 800);
         }).catch(function(err) {
             OfflineSync.queueRecord('patrol_scan', data);
             markLocalSuccess();
             showToast('💾 Saved locally — will sync', 'warning');
+            setTimeout(restartScanning, 800);
         });
     } else {
         OfflineSync.queueRecord('patrol_scan', data);
         markLocalSuccess();
         showToast('💾 Saved locally — will sync', 'warning');
+        setTimeout(restartScanning, 800);
     }
 }
 
@@ -437,10 +547,10 @@ function playBeep() {
         var gain = ctx.createGain();
         osc.connect(gain);
         gain.connect(ctx.destination);
-        osc.frequency.value = 1200;
-        gain.gain.value = 0.2;
+        osc.frequency.value = 1400;
+        gain.gain.value = 0.25;
         osc.start();
-        osc.stop(ctx.currentTime + 0.15);
+        osc.stop(ctx.currentTime + 0.18);
     } catch (e) {}
 }
 
@@ -467,6 +577,6 @@ function showToast(message, type) {
     if (typeof RBApp !== 'undefined' && RBApp.showToast) {
         RBApp.showToast(message, type);
     } else {
-        alert(message);
+        console.log('[patrol]', message);
     }
 }
