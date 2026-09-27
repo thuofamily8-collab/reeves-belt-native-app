@@ -5,6 +5,7 @@
  *
  * SPRINT 2:
  *   - Banner shows "(pending sync)" when shift_start is queued
+ *   - VIEW button now works (gotoShiftScreen exposed)
  * ============================================================
  */
 
@@ -98,6 +99,12 @@ var RBShift = (function() {
         return 'guard-shift.html';
     }
 
+    function gotoShiftScreen() {
+        var url = getShiftScreenUrl();
+        console.log('[RBShift] gotoShiftScreen →', url);
+        window.location.href = url;
+    }
+
     // ============================================================
     // BANNER
     // ============================================================
@@ -131,8 +138,8 @@ var RBShift = (function() {
                     '</div>' +
                 '</div>' +
                 '<div style="display:flex;gap:8px;">' +
-                    '<button onclick="RBShift.gotoShiftScreen()" style="background:#d4af37;color:#0a0e1a;border:none;padding:8px 14px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;">VIEW</button>' +
-                    '<button onclick="RBShift.requestEndFromBanner()" style="background:#ef4444;color:#fff;border:none;padding:8px 12px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;">END</button>' +
+                    '<button type="button" onclick="RBShift.gotoShiftScreen()" style="background:#d4af37;color:#0a0e1a;border:none;padding:8px 14px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;">VIEW</button>' +
+                    '<button type="button" onclick="RBShift.requestEndFromBanner()" style="background:#ef4444;color:#fff;border:none;padding:8px 12px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;">END</button>' +
                 '</div>' +
             '</div>';
 
@@ -146,10 +153,6 @@ var RBShift = (function() {
         if (!el) return;
         if (!isActive()) { el.textContent = '00:00:00'; return; }
         el.textContent = formatElapsed(getElapsedSeconds());
-    }
-
-    function gotoShiftScreen() {
-        window.location.href = getShiftScreenUrl();
     }
 
     function requestEndFromBanner() {
@@ -195,6 +198,7 @@ var RBShift = (function() {
         end: end,
         isPendingSync: isPendingSync,
         getShiftScreenUrl: getShiftScreenUrl,
+        gotoShiftScreen: gotoShiftScreen,
         injectBanner: injectBanner,
         requestEndFromBanner: requestEndFromBanner,
         confirmEndShift: confirmEndShift
