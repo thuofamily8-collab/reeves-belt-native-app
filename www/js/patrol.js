@@ -3,9 +3,12 @@
  * REEVES BELT APP - Patrol Module
  * QR scanning, checkpoint tracking, offline sync
  *
- * SPRINT 2 FIX:
- *   - submitPatrolScan() only calls the API when online
+ * SPRINT 2:
+ *   - submitPatrolScan() only calls API when online
  *   - Offline → queue only, no error toast
+ *
+ * SPRINT 2C:
+ *   - Faster QR scan: lower resolution, 60ms interval, 2-pass
  * ============================================================
  */
 
@@ -182,7 +185,7 @@ function requireShiftOrPrompt(action) {
 }
 
 // ============================================================
-// QR SCANNER (unchanged)
+// QR SCANNER — OPTIMIZED
 // ============================================================
 function startScanner() {
     if (!requireShiftOrPrompt('scanning checkpoints')) return;
@@ -217,12 +220,14 @@ function actuallyStartScanner() {
         return;
     }
 
+    // OPTIMIZED: 1280x720 instead of 1920x1080 — 2.7x less data per frame.
+    // QR resolution at this size is still far more than jsQR needs.
     var constraints = {
         audio: false,
         video: {
             facingMode: { ideal: 'environment' },
-            width:  { ideal: 1920, min: 640 },
-            height: { ideal: 1080, min: 480 },
+            width:  { ideal: 1280, min: 640 },
+            height: { ideal: 720,  min: 480 },
             focusMode: 'continuous'
         }
     };
@@ -254,8 +259,9 @@ function actuallyStartScanner() {
         video.onloadedmetadata = function() {
             video.play().catch(function() {});
             setTimeout(function() {
-                qrScanInterval = setInterval(scanQRFrame, 100);
-            }, 400);
+                // OPTIMIZED: 60ms instead of 100ms — more attempts, each faster
+                qrScanInterval = setInterval(scanQRFrame, 60);
+            }, 300);
         };
     })
     .catch(function(err) {
@@ -275,31 +281,22 @@ function scanQRFrame() {
 
     var code = null;
 
+    // Pass 1: cropped center (best chance — user aims at the QR)
     try {
-        var cropW = Math.floor(scanCanvas.width * 0.7);
-        var cropH = Math.floor(scanCanvas.height * 0.7);
+        var cropW = Math.floor(scanCanvas.width * 0.75);
+        var cropH = Math.floor(scanCanvas.height * 0.75);
         var cropX = Math.floor((scanCanvas.width - cropW) / 2);
         var cropY = Math.floor((scanCanvas.height - cropH) / 2);
         var imageData = scanCanvasContext.getImageData(cropX, cropY, cropW, cropH);
         code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' });
-    } catch (e) { console.log('Pass 1 error:', e); }
+    } catch (e) { /* ignore */ }
 
+    // Pass 2: full frame (fallback if the QR is off-center)
     if (!code) {
         try {
             var fullData = scanCanvasContext.getImageData(0, 0, scanCanvas.width, scanCanvas.height);
             code = jsQR(fullData.data, fullData.width, fullData.height, { inversionAttempts: 'dontInvert' });
-        } catch (e) { console.log('Pass 2 error:', e); }
-    }
-
-    if (!code) {
-        try {
-            var cropW2 = Math.floor(scanCanvas.width * 0.7);
-            var cropH2 = Math.floor(scanCanvas.height * 0.7);
-            var cropX2 = Math.floor((scanCanvas.width - cropW2) / 2);
-            var cropY2 = Math.floor((scanCanvas.height - cropH2) / 2);
-            var imageData2 = scanCanvasContext.getImageData(cropX2, cropY2, cropW2, cropH2);
-            code = jsQR(imageData2.data, imageData2.width, imageData2.height, { inversionAttempts: 'attemptBoth' });
-        } catch (e) { console.log('Pass 3 error:', e); }
+        } catch (e) { /* ignore */ }
     }
 
     if (code && code.data) handleQRDetected(code.data);
@@ -363,7 +360,7 @@ function stopScanner() {
 }
 
 // ============================================================
-// SUBMIT PATROL SCAN (fixed)
+// SUBMIT PATROL SCAN
 // ============================================================
 function submitPatrolScan(checkpointName, qrData) {
     showLoading('Logging checkpoint...');
@@ -399,7 +396,6 @@ function submitPatrolScan(checkpointName, qrData) {
             markLocalSuccess();
             showToast('✓ ' + checkpointName + ' logged', 'success');
         }).catch(function(err) {
-            // Network failed mid-flight → queue
             OfflineSync.queueRecord('patrol_scan', data);
             markLocalSuccess();
             showToast('💾 Saved locally — will sync', 'warning');
