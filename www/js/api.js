@@ -1,15 +1,6 @@
 /**
  * ============================================================
  * REEVES BELT APP - API CLIENT
- * Handles all communication with the server
- * Supports offline mode with request queueing
- *
- * UPDATED:
- *  - Sends both Authorization and X-Auth-Token headers
- *  - Detailed console logging
- *  - Improved error handling with HTTP status
- *  - Unified staff shift endpoints (guards + supervisors)
- *  - Roll call endpoints
  * ============================================================
  */
 
@@ -117,7 +108,7 @@ var RBApi = (function() {
             xhr.onreadystatechange = function() {
                 if (xhr.readyState !== 4) return;
 
-                log('RESPONSE ' + method + ' ' + url + ' | status=' + xhr.status + ' | len=' + (xhr.responseText ? xhr.responseText.length : 0));
+                log('RESPONSE ' + method + ' ' + url + ' | status=' + xhr.status);
 
                 if (xhr.status === 0) {
                     reject({
@@ -187,7 +178,6 @@ var RBApi = (function() {
     // PUBLIC API
     // ============================================================
     return {
-        // Storage
         getToken: getToken,
         setToken: setToken,
         clearToken: clearToken,
@@ -233,7 +223,7 @@ var RBApi = (function() {
         getPatrolPoints: function() { return request('/patrol/points.php', 'GET'); },
         logPatrolScan: function(data) { return request('/patrol/scan.php', 'POST', data); },
 
-        // ===== STAFF SHIFT (unified guard + supervisor) =====
+        // ===== STAFF SHIFT =====
         startStaffShift: function(data) { return request('/staff/shift-start.php', 'POST', data || {}); },
         endStaffShift: function(data) { return request('/staff/shift-end.php', 'POST', data || {}); },
         sendStaffLocation: function(data) { return request('/staff/location.php', 'POST', data); },
@@ -277,6 +267,41 @@ var RBApi = (function() {
 
         // ===== DASHBOARD =====
         getDashboardStats: function() { return request('/dashboard/stats.php', 'GET'); },
+
+        // ===== PRE-WEIGHED TRUCKS =====
+        preweighedCreate: function(data) {
+            return request('/preweighed/create.php', 'POST', data);
+        },
+        preweighedList: function(params) {
+            params = params || {};
+            var qs = [];
+            if (params.date) qs.push('date=' + encodeURIComponent(params.date));
+            if (params.status) qs.push('status=' + encodeURIComponent(params.status));
+            if (params.plate) qs.push('plate=' + encodeURIComponent(params.plate));
+            if (params.limit) qs.push('limit=' + encodeURIComponent(params.limit));
+            if (params.tenant_id) qs.push('tenant_id=' + encodeURIComponent(params.tenant_id));
+            var endpoint = '/preweighed/list.php';
+            if (qs.length) endpoint += '?' + qs.join('&');
+            return request(endpoint, 'GET');
+        },
+        preweighedReveal: function(code, tenantId) {
+            var body = { code: code };
+            if (tenantId) body.tenant_id = tenantId;
+            return request('/preweighed/reveal.php', 'POST', body);
+        },
+        preweighedUpdateStatus: function(truckId, status, notes) {
+            return request('/preweighed/update-status.php', 'POST', {
+                truck_id: truckId,
+                status: status,
+                notes: notes || null
+            });
+        },
+        preweighedSampleTaken: function(data) {
+            return request('/preweighed/sample-taken.php', 'POST', data);
+        },
+        preweighedSampleLabel: function(sampleId) {
+            return request('/preweighed/sample-label-pdf.php?sample_id=' + encodeURIComponent(sampleId), 'GET');
+        },
 
         // ===== DETECT (SIMULATE CAMERA) =====
         triggerDetection: function(type) {
