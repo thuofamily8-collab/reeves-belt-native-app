@@ -81,6 +81,8 @@
     padding: 16px;
     color: #fff;
 }
+
+/* Small in-card preview (kept for non-fullscreen fallback) */
 .scanner-frame {
     position: relative;
     width: 100%;
@@ -93,12 +95,6 @@
     align-items: center;
     justify-content: center;
 }
-.scanner-frame video {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: none;
-}
 #scannerPlaceholder {
     color: #666;
     text-align: center;
@@ -109,48 +105,180 @@
     display: block;
     margin-bottom: 8px;
 }
-#scannerFrame {
-    position: absolute;
-    top: 10%;
-    left: 10%;
-    right: 10%;
-    bottom: 10%;
-    border: 3px solid #d4af37;
-    border-radius: 12px;
-    display: none;
-    pointer-events: none;
-    box-shadow: 0 0 0 9999px rgba(0,0,0,0.5);
-}
 .scanner-buttons {
     display: flex;
     gap: 10px;
 }
 .scanner-buttons button {
     flex: 1;
-    padding: 12px;
+    padding: 14px;
     border-radius: 8px;
     border: none;
     font-size: 15px;
-    font-weight: 600;
+    font-weight: 700;
     cursor: pointer;
+    letter-spacing: 1px;
+    text-transform: uppercase;
 }
 .btn-start {
-    background: #d4af37;
+    background: linear-gradient(135deg, #d4af37, #f0d060);
     color: #0a0e1a;
+    box-shadow: 0 4px 0 #b8860b;
 }
-.btn-start:disabled {
-    background: #555;
-    color: #888;
-    cursor: not-allowed;
+.btn-start:active { transform: translateY(2px); box-shadow: 0 2px 0 #b8860b; }
+
+/* ============================================================
+   FULLSCREEN SCANNER OVERLAY
+   ============================================================ */
+#rbScannerOverlay {
+    position: fixed;
+    inset: 0;
+    background: #000;
+    z-index: 99999;
+    display: none;
+    flex-direction: column;
 }
-.btn-stop {
-    background: #dc3545;
+#rbScannerOverlay.show {
+    display: flex;
+}
+
+#rbScannerOverlay video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    z-index: 1;
+}
+
+/* Green aiming frame */
+#rbScannerFrame {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 78vw;
+    height: 78vw;
+    max-width: 78vh;
+    max-height: 78vh;
+    border: 3px solid #22c55e;
+    border-radius: 16px;
+    box-shadow:
+        0 0 0 9999px rgba(0,0,0,0.55),
+        0 0 24px rgba(34, 197, 94, 0.8),
+        inset 0 0 24px rgba(34, 197, 94, 0.3);
+    z-index: 2;
+    pointer-events: none;
+}
+
+/* Corner accents */
+#rbScannerFrame::before,
+#rbScannerFrame::after {
+    content: '';
+    position: absolute;
+    width: 40px;
+    height: 40px;
+    border: 4px solid #22c55e;
+}
+#rbScannerFrame::before {
+    top: -4px; left: -4px;
+    border-right: none; border-bottom: none;
+    border-top-left-radius: 16px;
+}
+#rbScannerFrame::after {
+    bottom: -4px; right: -4px;
+    border-left: none; border-top: none;
+    border-bottom-right-radius: 16px;
+}
+
+/* Top overlay bar */
+#rbScannerTop {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%);
+    z-index: 3;
     color: #fff;
 }
-.btn-stop:disabled {
-    background: #444;
-    color: #777;
-    cursor: not-allowed;
+#rbScannerTop .title {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: #d4af37;
+    text-transform: uppercase;
+}
+#rbScannerClose {
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.3);
+    color: #fff;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    font-size: 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+}
+
+/* Bottom hint bar */
+#rbScannerBottom {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    padding: 24px 20px 40px;
+    text-align: center;
+    background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%);
+    color: #fff;
+    z-index: 3;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+#rbScannerBottom .hint-icon {
+    font-size: 22px;
+    display: block;
+    margin-bottom: 6px;
+}
+
+/* Success flash */
+#rbScannerFlash {
+    position: absolute;
+    inset: 0;
+    background: rgba(34, 197, 94, 0.85);
+    z-index: 4;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 10px;
+    color: #fff;
+}
+#rbScannerFlash.show {
+    display: flex;
+    animation: flashIn 0.25s ease-out;
+}
+#rbScannerFlash .check {
+    font-size: 90px;
+    line-height: 1;
+}
+#rbScannerFlash .label {
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+#rbScannerFlash .checkpoint-name {
+    font-size: 16px;
+    font-weight: 600;
+    opacity: 0.95;
+}
+@keyframes flashIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
 }
 
 .scan-result {
@@ -262,10 +390,8 @@
     <h1>🛡️ Patrol Scan</h1>
 </header>
 
-<!-- SHIFT BANNER -->
 <div id="rbDutyBanner" style="display:none;"></div>
 
-<!-- Progress -->
 <div class="progress-card">
     <div class="progress-header">
         <div>
@@ -283,28 +409,22 @@
     </div>
 </div>
 
-<!-- Scanner -->
 <div class="scanner-card">
-    <div class="scanner-frame">
+    <div class="scanner-frame" id="inCardPlaceholder">
         <div id="scannerPlaceholder">
             <span class="icon">📷</span>
             <div>Tap "Start Scanner" below</div>
         </div>
-        <video id="qrVideo" playsinline autoplay muted></video>
-        <div id="scannerFrame"></div>
     </div>
     <div class="scanner-buttons">
         <button class="btn-start" id="startScanBtn" onclick="startScanner()">▶ Start Scanner</button>
-        <button class="btn-stop" id="stopScanBtn" onclick="stopScanner()" disabled>■ Stop</button>
     </div>
 </div>
 
-<!-- Scan result -->
 <div class="scan-result" id="scanResult">
     <div id="scanSuccessText">—</div>
 </div>
 
-<!-- Checkpoints list -->
 <div class="checkpoints-card">
     <h2>Checkpoints</h2>
     <div id="checkpointsList">
@@ -314,7 +434,6 @@
     </div>
 </div>
 
-<!-- Manual select -->
 <div class="manual-card">
     <h2>Manual Log</h2>
     <select id="manualCheckpoint">
@@ -323,9 +442,33 @@
     <button class="btn-manual" onclick="submitManualScan()">Log Checkpoint</button>
 </div>
 
-<!-- Loading overlay -->
 <div id="loadingOverlay">
     <div id="loadingText">Loading...</div>
+</div>
+
+<!-- ============================================================
+     FULLSCREEN SCANNER OVERLAY
+     ============================================================ -->
+<div id="rbScannerOverlay">
+    <video id="rbScannerVideo" playsinline autoplay muted></video>
+
+    <div id="rbScannerFrame"></div>
+
+    <div id="rbScannerTop">
+        <div class="title">Scan Checkpoint QR</div>
+        <button id="rbScannerClose" onclick="stopScanner()">✕</button>
+    </div>
+
+    <div id="rbScannerBottom">
+        <span class="hint-icon">🎯</span>
+        Point the camera at the QR code
+    </div>
+
+    <div id="rbScannerFlash">
+        <div class="check">✓</div>
+        <div class="label">SCANNED</div>
+        <div class="checkpoint-name" id="rbFlashCheckpoint"></div>
+    </div>
 </div>
 
 <script src="js/api.js"></script>
