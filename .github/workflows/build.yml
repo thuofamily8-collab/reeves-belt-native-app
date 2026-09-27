@@ -15,56 +15,34 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # ------------------------------------------------------------
-      # 1. Checkout
-      # ------------------------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ------------------------------------------------------------
-      # 2. Node.js
-      # ------------------------------------------------------------
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
 
-      # ------------------------------------------------------------
-      # 3. Java JDK
-      # ------------------------------------------------------------
       - name: Setup Java JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      # ------------------------------------------------------------
-      # 4. Android SDK
-      # ------------------------------------------------------------
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
           packages: 'platform-tools'
 
-      # ------------------------------------------------------------
-      # 5. Install npm dependencies
-      # ------------------------------------------------------------
       - name: Install npm dependencies
         run: npm install
 
-      # ------------------------------------------------------------
-      # 6. Add Android platform
-      # ------------------------------------------------------------
       - name: Add Android platform
         run: |
           if [ ! -d "android" ]; then
             npx cap add android
           fi
 
-      # ------------------------------------------------------------
-      # 7. Generate Android icons + splash screens from resources/
-      #    This is what creates the gold shield icon in all sizes.
-      # ------------------------------------------------------------
       - name: Generate Android assets
         run: |
           npx @capacitor/assets generate \
@@ -73,9 +51,17 @@ jobs:
             --splashBackgroundColor '#0a0e1a'
         continue-on-error: true
 
-      # ------------------------------------------------------------
-      # 8. Patch target SDK for Android 14+ compatibility
-      # ------------------------------------------------------------
+      # --- NEW: Add JitPack repository before building ---
+      - name: Add JitPack repository for usb-serial-for-android
+        run: |
+          SETTINGS_FILE="android/settings.gradle"
+          if ! grep -q "jitpack.io" "$SETTINGS_FILE"; then
+            # Insert JitPack repo into dependencyResolutionManagement block
+            sed -i '/repositories {/a\        maven { url "https://jitpack.io" }' "$SETTINGS_FILE"
+          fi
+          echo "--- settings.gradle after patch ---"
+          cat "$SETTINGS_FILE"
+
       - name: Patch target SDK for Android 14 compatibility
         run: |
           cat > android/variables.gradle << 'EOF'
@@ -96,12 +82,7 @@ jobs:
               cordovaAndroidVersion = '10.1.1'
           }
           EOF
-          echo "--- variables.gradle after patch ---"
-          cat android/variables.gradle
 
-      # ------------------------------------------------------------
-      # 9. Patch AndroidManifest permissions
-      # ------------------------------------------------------------
       - name: Patch AndroidManifest permissions
         run: |
           MANIFEST="android/app/src/main/AndroidManifest.xml"
@@ -117,34 +98,24 @@ jobs:
               <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\
               <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />\
               <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />\
+              <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />\
+              <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />\
+              <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />\
+              <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />\
               <uses-feature android:name="android.hardware.camera" android:required="true" />\
               <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />' "$MANIFEST"
           fi
-          echo "--- Manifest after patch ---"
-          cat "$MANIFEST"
 
-      # ------------------------------------------------------------
-      # 10. Capacitor sync
-      # ------------------------------------------------------------
       - name: Capacitor sync
         run: npx cap sync android
 
-      # ------------------------------------------------------------
-      # 11. Make gradlew executable
-      # ------------------------------------------------------------
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
-      # ------------------------------------------------------------
-      # 12. Build Debug APK
-      # ------------------------------------------------------------
       - name: Build Debug APK
         working-directory: android
         run: ./gradlew assembleDebug --stacktrace
 
-      # ------------------------------------------------------------
-      # 13. Prepare artifact
-      # ------------------------------------------------------------
       - name: Prepare APK artifact
         run: |
           mkdir -p artifacts
@@ -153,9 +124,6 @@ jobs:
              artifacts/reeves-belt-app-debug-${TIMESTAMP}.apk
           ls -la artifacts/
 
-      # ------------------------------------------------------------
-      # 14. Upload APK
-      # ------------------------------------------------------------
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
@@ -164,9 +132,6 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
-      # ------------------------------------------------------------
-      # 15. Attach APK to GitHub Release (on tags)
-      # ------------------------------------------------------------
       - name: Attach APK to GitHub Release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
