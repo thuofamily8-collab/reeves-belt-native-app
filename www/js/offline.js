@@ -8,6 +8,7 @@
  * SPRINT 2B: emits 'synced' event so UI can refresh live
  * SPRINT 2C: authoritative online detection via Capacitor
  *            Network plugin + server heartbeat fallback
+ * SPRINT 2D: heartbeat interval reduced 20s → 8s
  * ============================================================
  */
 
@@ -230,8 +231,8 @@ var OfflineSync = (function() {
 /* ============================================================
    RBOffline — network bar + last-sync tracking
    ============================================================
-   Sprint 2C: Navigator.onLine is unreliable on Android WebView.
-   We now take the Capacitor Network plugin as authoritative
+   Navigator.onLine is unreliable on Android WebView.
+   We take the Capacitor Network plugin as authoritative
    when available, and fall back to a periodic server ping.
    ============================================================ */
 
@@ -249,10 +250,10 @@ var RBOffline = (function () {
     var HEARTBEAT_URL = 'https://www.pajhub.co.ke/api/v1/auth/verify.php';
 
     // How often to ping the server to confirm we're truly online (ms)
-    var HEARTBEAT_INTERVAL = 20000;
+    // Sprint 2D: reduced from 20s to 8s for faster recovery
+    var HEARTBEAT_INTERVAL = 8000;
 
     function init() {
-        // Seed from navigator (best effort) — heartbeat will correct it
         _online = (navigator.onLine !== false);
 
         updateNetworkBar();
@@ -269,7 +270,6 @@ var RBOffline = (function () {
                     console.log('[RBOffline] Network plugin:', status.connected ? 'online' : 'offline');
                     setOnline(!!status.connected);
                     if (status.connected) {
-                        // Give the OS a beat, then push the queue
                         setTimeout(function () {
                             if (typeof OfflineSync !== 'undefined'
                                 && OfflineSync.getQueueCount() > 0) {
@@ -298,17 +298,12 @@ var RBOffline = (function () {
     }
 
     // ----------------------------------------------------------
-    // Heartbeat — ping the server periodically; if it responds, we
-    // are definitely online. If it fails, we are definitely offline.
-    // This is authoritative regardless of what navigator.onLine says.
+    // Heartbeat — ping the server periodically
     // ----------------------------------------------------------
     function startHeartbeat() {
         if (_heartbeatTimer) clearInterval(_heartbeatTimer);
 
-        // Run one soon after load
         setTimeout(heartbeat, 2000);
-
-        // Then every HEARTBEAT_INTERVAL
         _heartbeatTimer = setInterval(heartbeat, HEARTBEAT_INTERVAL);
     }
 
@@ -327,25 +322,19 @@ var RBOffline = (function () {
             xhr.onreadystatechange = function() {
                 if (xhr.readyState !== 4) return;
 
-                // 2xx = reachable. 4xx (401 etc) = server reached, just
-                // rejected us → still "online". Only network failure = offline.
+                // 2xx-4xx = reachable. 5xx or timeout = probably outage.
                 if (xhr.status >= 200 && xhr.status < 500) {
                     if (!_online) {
                         console.log('[RBOffline] Heartbeat success — back online');
                         setOnline(true);
-                        // Fire a sync attempt right away
                         setTimeout(function () {
                             if (typeof OfflineSync !== 'undefined'
                                 && OfflineSync.getQueueCount() > 0) {
                                 OfflineSync.syncNow();
                             }
                         }, 500);
-                    } else {
-                        // Still online — quietly refresh last sync marker
-                        // (no user-visible effect)
                     }
                 } else {
-                    // 5xx or timeout — probably a real outage
                     if (_online) {
                         console.log('[RBOffline] Heartbeat failed with status', xhr.status);
                         setOnline(false);
@@ -374,7 +363,6 @@ var RBOffline = (function () {
     }
 
     function forceOnlineCheck() {
-        // Kick the heartbeat immediately
         heartbeat();
     }
 
