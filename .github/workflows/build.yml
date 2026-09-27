@@ -43,11 +43,12 @@ jobs:
       - name: Install npm dependencies
         run: npm install
 
-      # --- Strip USB dependency from thermal printer plugin ---
-      # Bluetooth + TCP do not need the USB serial library, and JitPack
-      # is unreliable to reach from CI. Removing it lets the build
-      # succeed with the transports we actually use.
-      - name: Strip USB dependency from plugin
+      # --- Disable USB transport in thermal printer plugin ---
+      # The plugin's Kotlin code references a USB serial library
+      # (@hoho and @mik3y). We strip both the Gradle dependency and
+      # disable the Kotlin file that uses them. Bluetooth + TCP work
+      # without any of this.
+      - name: Disable USB transport in thermal printer plugin
         run: |
           PLUGIN_DIR="node_modules/@devlas/capacitor-thermal-printer/android"
           PLUGIN_GRADLE="$PLUGIN_DIR/build.gradle"
@@ -56,20 +57,29 @@ jobs:
           cat "$PLUGIN_GRADLE" || echo "(not found)"
 
           if [ -f "$PLUGIN_GRADLE" ]; then
-            # Remove any line mentioning usb-serial
             sed -i '/usb-serial-for-android/d' "$PLUGIN_GRADLE"
+            sed -i '/com.hoho.android:usbserial/d' "$PLUGIN_GRADLE"
+            sed -i '/hoho/d' "$PLUGIN_GRADLE"
           fi
 
           echo "=== Plugin build.gradle AFTER patch ==="
           cat "$PLUGIN_GRADLE" || echo "(not found)"
 
-          # Also patch any Gradle files inside the plugin's Java sources
-          # (Capacitor plugins sometimes nest their dependencies)
-          find "$PLUGIN_DIR" -name "build.gradle" -exec grep -l "usb-serial" {} \; \
+          # Disable the Kotlin file that imports the USB library.
+          # Renaming .kt -> .kt.disabled hides it from the Kotlin compiler.
+          USB_KT="$PLUGIN_DIR/src/main/java/app/devlas/plugins/thermalprinter/BalanzaSerialTransport.kt"
+          if [ -f "$USB_KT" ]; then
+            echo "Renaming USB transport file to disable it"
+            mv "$USB_KT" "${USB_KT}.disabled"
+          fi
+
+          # Also scan for any other Kotlin file that imports the USB libs
+          grep -rl "UsbSerialPort\|UsbSerialProber\|hoho" \
+               "$PLUGIN_DIR/src/main/java/" 2>/dev/null \
             | while read f; do
-                echo "Stripping USB from: $f"
-                sed -i '/usb-serial-for-android/d' "$f"
-            done
+                echo "Disabling USB-dependent file: $f"
+                mv "$f" "${f}.disabled"
+              done
 
       - name: Add Android platform
         run: |
