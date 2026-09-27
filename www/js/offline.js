@@ -3,10 +3,11 @@
  * REEVES BELT SECURE 360 - OFFLINE SYNC ENGINE
  * Queues records when offline, auto-syncs when online
  *
- * SPRINT 1: RBOffline network bar + cached credentials
- * SPRINT 2: shift_start / shift_end queue support
- * STYLE:    concise network bar text
+ * SPRINT 1:  RBOffline network bar + cached credentials
+ * SPRINT 2:  shift_start / shift_end queue support
  * SPRINT 2B: emits 'synced' event so UI can refresh live
+ * SPRINT 2C: authoritative online detection via Capacitor
+ *            Network plugin + server heartbeat fallback
  * ============================================================
  */
 
@@ -40,7 +41,6 @@ var OfflineSync = (function() {
         saveQueue(queue);
         console.log('[OfflineSync] Queued:', type, record.id);
 
-        // Notify listeners so UI (badges etc.) can refresh immediately
         if (typeof RBOffline !== 'undefined' && RBOffline.emit) {
             RBOffline.emit({ type: 'queued', record_type: type });
         }
@@ -74,7 +74,13 @@ var OfflineSync = (function() {
                 return;
             }
 
-            if (!navigator.onLine) {
+            // NOTE: We check RBOffline.isOffline() instead of navigator.onLine
+            // because the WebView's online state is unreliable.
+            var offline = (typeof RBOffline !== 'undefined')
+                ? RBOffline.isOffline()
+                : (navigator.onLine === false);
+
+            if (offline) {
                 resolve({ synced: 0, failed: 0, message: 'Offline' });
                 return;
             }
@@ -93,7 +99,6 @@ var OfflineSync = (function() {
                         RBOffline.setLastSync(Date.now());
                     }
 
-                    // Notify any listeners (badges, UI) that the queue drained
                     if (typeof RBOffline !== 'undefined' && RBOffline.emit) {
                         RBOffline.emit({
                             type:      'synced',
@@ -137,37 +142,19 @@ var OfflineSync = (function() {
             var payload = record.data;
 
             switch (record.type) {
-                case 'shift_start':
-                    endpoint = '/staff/shift-start.php';
-                    break;
-                case 'shift_end':
-                    endpoint = '/staff/shift-end.php';
-                    break;
-                case 'vehicle_entry':
-                    endpoint = '/camera/detect.php';
-                    break;
-                case 'vehicle_exit':
-                    endpoint = '/vehicle/exit.php';
-                    break;
-                case 'visitor_checkin':
-                    endpoint = '/visitor/checkin.php';
-                    break;
-                case 'visitor_checkout':
-                    endpoint = '/visitor/checkout.php';
-                    break;
-                case 'patrol_scan':
-                    endpoint = '/patrol/scan.php';
-                    break;
-                case 'staff_location':
-                    endpoint = '/staff/location.php';
-                    break;
+                case 'shift_start':    endpoint = '/staff/shift-start.php';    break;
+                case 'shift_end':      endpoint = '/staff/shift-end.php';      break;
+                case 'vehicle_entry':  endpoint = '/camera/detect.php';        break;
+                case 'vehicle_exit':   endpoint = '/vehicle/exit.php';         break;
+                case 'visitor_checkin':endpoint = '/visitor/checkin.php';      break;
+                case 'visitor_checkout':endpoint = '/visitor/checkout.php';    break;
+                case 'patrol_scan':    endpoint = '/patrol/scan.php';          break;
+                case 'staff_location': endpoint = '/staff/location.php';       break;
                 default:
                     reject(new Error('Unknown record type: ' + record.type));
                     return;
             }
 
-            // Attach the record's original timestamp so the server
-            // can store it as client_time / client_started_at etc.
             if (record.created_at && !payload.client_time) {
                 payload = Object.assign({}, payload, { client_time: record.created_at });
             }
@@ -212,7 +199,7 @@ var OfflineSync = (function() {
     }
 
     window.addEventListener('online', function() {
-        console.log('[OfflineSync] Network restored - syncing...');
+        console.log('[OfflineSync] window online event — syncing...');
         syncNow().then(function(result) {
             if (result.synced > 0 && typeof RBApp !== 'undefined') {
                 RBApp.showToast('✅ Synced ' + result.synced + ' record(s)', 'success');
@@ -221,8 +208,12 @@ var OfflineSync = (function() {
     });
 
     setInterval(function() {
-        if (navigator.onLine && getQueueCount() > 0) {
-            syncNow();
+        if (typeof RBOffline !== 'undefined'
+            ? RBOffline.isOnline()
+            : navigator.onLine) {
+            if (getQueueCount() > 0) {
+                syncNow();
+            }
         }
     }, SYNC_INTERVAL);
 
@@ -238,7 +229,10 @@ var OfflineSync = (function() {
 
 /* ============================================================
    RBOffline — network bar + last-sync tracking
-   Reuses existing #networkBar element
+   ============================================================
+   Sprint 2C: Navigator.onLine is unreliable on Android WebView.
+   We now take the Capacitor Network plugin as authoritative
+   when available, and fall back to a periodic server ping.
    ============================================================ */
 
 var RBOffline = (function () {
@@ -246,27 +240,142 @@ var RBOffline = (function () {
     var _online = true;
     var _listeners = [];
     var _hideTimer = null;
+    var _heartbeatTimer = null;
 
     var KEY_LAST_SYNC    = 'rb_last_sync';
     var KEY_FORCE_ONLINE = 'rb_force_online';
 
-    function init() {
-        _online = (navigator.onLine !== false);
-        updateNetworkBar();
+    // Public endpoint used as a lightweight heartbeat
+    var HEARTBEAT_URL = 'https://www.pajhub.co.ke/api/v1/auth/verify.php';
 
-        window.addEventListener('online',  function () { setOnline(true);  });
+    // How often to ping the server to confirm we're truly online (ms)
+    var HEARTBEAT_INTERVAL = 20000;
+
+    function init() {
+        // Seed from navigator (best effort) — heartbeat will correct it
+        _online = (navigator.onLine !== false);
+
+        updateNetworkBar();
+        startHeartbeat();
+
+        // 1. Browser events (unreliable but harmless)
+        window.addEventListener('online',  function () { forceOnlineCheck(); });
         window.addEventListener('offline', function () { setOnline(false); });
 
+        // 2. Capacitor Network plugin — authoritative
         if (window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.Network) {
             try {
                 Capacitor.Plugins.Network.addListener('networkStatusChange', function (status) {
+                    console.log('[RBOffline] Network plugin:', status.connected ? 'online' : 'offline');
                     setOnline(!!status.connected);
+                    if (status.connected) {
+                        // Give the OS a beat, then push the queue
+                        setTimeout(function () {
+                            if (typeof OfflineSync !== 'undefined'
+                                && OfflineSync.getQueueCount() > 0) {
+                                OfflineSync.syncNow();
+                            }
+                        }, 1500);
+                    }
                 });
+
                 Capacitor.Plugins.Network.getStatus().then(function (status) {
+                    console.log('[RBOffline] Initial network status:', status.connected);
                     setOnline(!!status.connected);
                 }).catch(function () { /* ignore */ });
             } catch (e) { /* ignore */ }
         }
+
+        // 3. If queue has items on load and we think we're online, sync now
+        setTimeout(function () {
+            if (typeof OfflineSync !== 'undefined'
+                && _online
+                && OfflineSync.getQueueCount() > 0) {
+                console.log('[RBOffline] Queue has items on load — syncing now');
+                OfflineSync.syncNow();
+            }
+        }, 1500);
+    }
+
+    // ----------------------------------------------------------
+    // Heartbeat — ping the server periodically; if it responds, we
+    // are definitely online. If it fails, we are definitely offline.
+    // This is authoritative regardless of what navigator.onLine says.
+    // ----------------------------------------------------------
+    function startHeartbeat() {
+        if (_heartbeatTimer) clearInterval(_heartbeatTimer);
+
+        // Run one soon after load
+        setTimeout(heartbeat, 2000);
+
+        // Then every HEARTBEAT_INTERVAL
+        _heartbeatTimer = setInterval(heartbeat, HEARTBEAT_INTERVAL);
+    }
+
+    function heartbeat() {
+        try {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', HEARTBEAT_URL + '?hb=' + Date.now(), true);
+            xhr.timeout = 8000;
+
+            var token = localStorage.getItem('rb_token');
+            if (token) {
+                xhr.setRequestHeader('Authorization', 'Bearer ' + token);
+                xhr.setRequestHeader('X-Auth-Token', token);
+            }
+
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState !== 4) return;
+
+                // 2xx = reachable. 4xx (401 etc) = server reached, just
+                // rejected us → still "online". Only network failure = offline.
+                if (xhr.status >= 200 && xhr.status < 500) {
+                    if (!_online) {
+                        console.log('[RBOffline] Heartbeat success — back online');
+                        setOnline(true);
+                        // Fire a sync attempt right away
+                        setTimeout(function () {
+                            if (typeof OfflineSync !== 'undefined'
+                                && OfflineSync.getQueueCount() > 0) {
+                                OfflineSync.syncNow();
+                            }
+                        }, 500);
+                    } else {
+                        // Still online — quietly refresh last sync marker
+                        // (no user-visible effect)
+                    }
+                } else {
+                    // 5xx or timeout — probably a real outage
+                    if (_online) {
+                        console.log('[RBOffline] Heartbeat failed with status', xhr.status);
+                        setOnline(false);
+                    }
+                }
+            };
+
+            xhr.onerror = function() {
+                if (_online) {
+                    console.log('[RBOffline] Heartbeat error — offline');
+                    setOnline(false);
+                }
+            };
+
+            xhr.ontimeout = function() {
+                if (_online) {
+                    console.log('[RBOffline] Heartbeat timeout — offline');
+                    setOnline(false);
+                }
+            };
+
+            xhr.send();
+        } catch (e) {
+            // ignore
+        }
+    }
+
+    function forceOnlineCheck() {
+        // Kick the heartbeat immediately
+        heartbeat();
     }
 
     function isOnline()  { return _online; }
@@ -372,7 +481,8 @@ var RBOffline = (function () {
         humanLastSync:    humanLastSync,
         on:               on,
         emit:             emit,
-        updateNetworkBar: updateNetworkBar
+        updateNetworkBar: updateNetworkBar,
+        heartbeat:        heartbeat
     };
 
 })();
