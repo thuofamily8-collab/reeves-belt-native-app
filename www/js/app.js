@@ -2,14 +2,6 @@
  * ============================================================
  * REEVES BELT APP - APP LOGIC
  * ============================================================
- * SPRINT 1:
- *   startNetworkMonitor() now defers to RBOffline when available.
- *   Legacy inline behavior retained as fallback for pages that
- *   don't load offline.js.
- *
- * SPRINT 2:
- *   Hardware back button is intercepted — never routes to login.html.
- * ============================================================
  */
 
 var RBApp = (function() {
@@ -17,50 +9,57 @@ var RBApp = (function() {
     // ============================================================
     // BACK BUTTON ROUTING
     // ============================================================
-    // Android hardware back button: never let it pop to login.html.
-    // Route based on the current page and user role.
     function initBackButton() {
         if (!window.Capacitor || !Capacitor.Plugins || !Capacitor.Plugins.App) return;
 
-        Capacitor.Plugins.App.addListener('backButton', function (evt) {
+        // Routes: page → back destination
+        var BACK_MAP = {
+            'preweighed-list.html':   'dashboard.html',
+            'preweighed-add.html':    'preweighed-list.html',
+            'preweighed-detail.html': 'preweighed-list.html',
+            'preweighed-sample.html': 'preweighed-list.html',
+            'preweighed-reveal.html': 'preweighed-list.html',
+            'alcohol-test.html':      'dashboard.html',
+            'employee-clock.html':    'dashboard.html',
+            'vehicle-entry.html':     'dashboard.html',
+            'vehicle-exit.html':      'dashboard.html',
+            'visitor-checkin.html':   'dashboard.html',
+            'patrol-scan.html':       'dashboard.html',
+            'guard-shift.html':       'dashboard.html',
+            'supervisor-shift.html':  'supervisor.html'
+        };
+
+        Capacitor.Plugins.App.addListener('backButton', function () {
             var path = window.location.pathname || '';
             var file = path.substring(path.lastIndexOf('/') + 1);
 
             console.log('[backButton] pressed on', file);
 
-            // ---------- Login screen ----------
             if (file === 'login.html' || file === '' || file === 'index.html') {
                 Capacitor.Plugins.App.exitApp();
                 return;
             }
 
-            // ---------- Role landing pages ----------
             var isSupervisor = (typeof RBAuth !== 'undefined'
                              && RBAuth.isSupervisor
                              && RBAuth.isSupervisor());
 
-            if (file === 'dashboard.html') {
+            if (file === 'dashboard.html' || file === 'supervisor.html') {
                 Capacitor.Plugins.App.exitApp();
                 return;
             }
 
-            if (file === 'supervisor.html') {
-                Capacitor.Plugins.App.exitApp();
+            if (BACK_MAP[file]) {
+                window.location.href = BACK_MAP[file];
                 return;
             }
 
-            if (file === 'guard-shift.html' || file === 'supervisor-shift.html') {
-                window.location.href = isSupervisor ? 'supervisor.html' : 'dashboard.html';
-                return;
-            }
-
-            // ---------- Any other inner page → go home ----------
             window.location.href = isSupervisor ? 'supervisor.html' : 'dashboard.html';
         });
     }
 
     // ============================================================
-    // TOAST NOTIFICATIONS
+    // TOAST
     // ============================================================
     function showToast(message, type) {
         type = type || 'info';
@@ -79,7 +78,7 @@ var RBApp = (function() {
     }
 
     // ============================================================
-    // LOGOUT CONFIRMATION
+    // LOGOUT
     // ============================================================
     function confirmLogout() {
         var onShift = (typeof RBShift !== 'undefined' && RBShift.isActive());
@@ -187,14 +186,11 @@ var RBApp = (function() {
     // NETWORK MONITOR
     // ============================================================
     function startNetworkMonitor() {
-        // Sprint 1: RBOffline now owns network state + the bar.
-        // If offline.js loaded RBOffline, defer to it.
         if (typeof RBOffline !== 'undefined') {
             RBOffline.init();
             return;
         }
 
-        // ---- Legacy fallback (for pages that don't load offline.js) ----
         var bar = document.getElementById('networkBar');
         if (!bar) return;
 
@@ -225,20 +221,12 @@ var RBApp = (function() {
         if (navigator.vibrate) navigator.vibrate(30);
     }
 
-    // ============================================================
-    // AUTO-INIT
-    // ============================================================
-    // Wire the back button as soon as app.js loads — every page
-    // that includes this file gets the fix automatically.
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', initBackButton);
     } else {
         initBackButton();
     }
 
-    // ============================================================
-    // PUBLIC API
-    // ============================================================
     return {
         showToast: showToast,
         confirmLogout: confirmLogout,
