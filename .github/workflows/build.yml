@@ -31,9 +31,7 @@ jobs:
 
       - name: Install Android SDK platform-tools
         run: |
-          # Ubuntu runners come with Android SDK pre-installed under ANDROID_HOME
           echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           if [ -f "$SDKMANAGER" ]; then
             yes | "$SDKMANAGER" --licenses || true
@@ -44,6 +42,34 @@ jobs:
 
       - name: Install npm dependencies
         run: npm install
+
+      # --- Strip USB dependency from thermal printer plugin ---
+      # Bluetooth + TCP do not need the USB serial library, and JitPack
+      # is unreliable to reach from CI. Removing it lets the build
+      # succeed with the transports we actually use.
+      - name: Strip USB dependency from plugin
+        run: |
+          PLUGIN_DIR="node_modules/@devlas/capacitor-thermal-printer/android"
+          PLUGIN_GRADLE="$PLUGIN_DIR/build.gradle"
+
+          echo "=== Plugin build.gradle BEFORE patch ==="
+          cat "$PLUGIN_GRADLE" || echo "(not found)"
+
+          if [ -f "$PLUGIN_GRADLE" ]; then
+            # Remove any line mentioning usb-serial
+            sed -i '/usb-serial-for-android/d' "$PLUGIN_GRADLE"
+          fi
+
+          echo "=== Plugin build.gradle AFTER patch ==="
+          cat "$PLUGIN_GRADLE" || echo "(not found)"
+
+          # Also patch any Gradle files inside the plugin's Java sources
+          # (Capacitor plugins sometimes nest their dependencies)
+          find "$PLUGIN_DIR" -name "build.gradle" -exec grep -l "usb-serial" {} \; \
+            | while read f; do
+                echo "Stripping USB from: $f"
+                sed -i '/usb-serial-for-android/d' "$f"
+            done
 
       - name: Add Android platform
         run: |
@@ -58,17 +84,6 @@ jobs:
             --iconBackgroundColor '#0a0e1a' \
             --splashBackgroundColor '#0a0e1a'
         continue-on-error: true
-
-      - name: Patch thermal-printer plugin build.gradle for JitPack
-        run: |
-          PLUGIN_GRADLE="node_modules/@devlas/capacitor-thermal-printer/android/build.gradle"
-          echo "=== Plugin build.gradle BEFORE patch ==="
-          cat "$PLUGIN_GRADLE" || echo "(file not found)"
-          if [ -f "$PLUGIN_GRADLE" ] && ! grep -q "jitpack.io" "$PLUGIN_GRADLE"; then
-            sed -i '/^repositories {/a\        maven { url "https://jitpack.io" }' "$PLUGIN_GRADLE"
-          fi
-          echo "=== Plugin build.gradle AFTER patch ==="
-          cat "$PLUGIN_GRADLE" || echo "(file not found)"
 
       - name: Patch target SDK for Android 14 compatibility
         run: |
