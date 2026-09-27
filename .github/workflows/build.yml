@@ -30,7 +30,7 @@ jobs:
           java-version: '17'
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        uses: actions/setup-android@v3
         with:
           packages: 'platform-tools'
 
@@ -51,16 +51,22 @@ jobs:
             --splashBackgroundColor '#0a0e1a'
         continue-on-error: true
 
-      # --- NEW: Add JitPack repository before building ---
-      - name: Add JitPack repository for usb-serial-for-android
+      # --- NEW: Patch the plugin's build.gradle to add JitPack ---
+      - name: Patch thermal-printer plugin build.gradle for JitPack
         run: |
-          SETTINGS_FILE="android/settings.gradle"
-          if ! grep -q "jitpack.io" "$SETTINGS_FILE"; then
-            # Insert JitPack repo into dependencyResolutionManagement block
-            sed -i '/repositories {/a\        maven { url "https://jitpack.io" }' "$SETTINGS_FILE"
+          PLUGIN_GRADLE="node_modules/@devlas/capacitor-thermal-printer/android/build.gradle"
+
+          echo "=== Current plugin build.gradle BEFORE patch ==="
+          cat "$PLUGIN_GRADLE"
+
+          # Insert JitPack repository inside the repositories block
+          if ! grep -q "jitpack.io" "$PLUGIN_GRADLE"; then
+            # Match the repositories { line and add jitpack after it
+            sed -i '/^repositories {/a\        maven { url "https://jitpack.io" }' "$PLUGIN_GRADLE"
           fi
-          echo "--- settings.gradle after patch ---"
-          cat "$SETTINGS_FILE"
+
+          echo "=== Plugin build.gradle AFTER patch ==="
+          cat "$PLUGIN_GRADLE"
 
       - name: Patch target SDK for Android 14 compatibility
         run: |
