@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#0a192f">
+    <title>Take Sample - Reeves Belt App</title>
+    <link rel="stylesheet" href="css/app.css">
+    <link rel="stylesheet" href="css/forms.css">
+</head>
+<body class="form-page">
+
+    <div class="network-bar" id="networkBar"></div>
+
+    <div class="form-container">
+
+        <div class="form-header">
+            <button class="back-btn" onclick="window.location.href='preweighed-list.html'">←</button>
+            <div class="form-header-title">🧪 Take Sample</div>
+        </div>
+
+        <div class="info-banner warning">
+            <strong>Witnesses required:</strong> Both witnesses must be present and confirm the sample was taken from the assigned truck.
+        </div>
+
+        <div class="form-card">
+            <div class="form-card-title">Truck</div>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <div style="font-size:11px; color:#8892b0; letter-spacing:1px; margin-bottom:4px;">PLATE</div>
+                    <div id="pwSamplePlate" style="font-size:20px; font-weight:900; color:#00c6ff; font-family:'Courier New',monospace;">—</div>
+                </div>
+                <div style="text-align:right;">
+                    <div style="font-size:11px; color:#8892b0; letter-spacing:1px; margin-bottom:4px;">CODE</div>
+                    <div id="pwSampleCode" style="font-size:24px; font-weight:900; color:#f0d060; font-family:'Courier New',monospace; letter-spacing:3px;">—</div>
+                </div>
+            </div>
+            <div style="margin-top:12px; font-size:13px; color:#ccd6f6;">
+                📦 <span id="pwSampleProduct">—</span>
+            </div>
+        </div>
+
+        <div class="form-card">
+            <div class="form-card-title">Witness 1</div>
+            <div class="field">
+                <label class="field-label">Full Name *</label>
+                <input type="text" id="pwW1Name" class="field-input" placeholder="Witness 1 name">
+            </div>
+            <div class="field">
+                <label class="field-label">ID Number *</label>
+                <input type="text" id="pwW1Id" class="field-input" placeholder="ID number" inputmode="numeric">
+            </div>
+        </div>
+
+        <div class="form-card">
+            <div class="form-card-title">Witness 2</div>
+            <div class="field">
+                <label class="field-label">Full Name *</label>
+                <input type="text" id="pwW2Name" class="field-input" placeholder="Witness 2 name">
+            </div>
+            <div class="field">
+                <label class="field-label">ID Number *</label>
+                <input type="text" id="pwW2Id" class="field-input" placeholder="ID number" inputmode="numeric">
+            </div>
+        </div>
+
+        <div class="form-card">
+            <div class="form-card-title">Notes</div>
+            <div class="field">
+                <textarea id="pwSampleNotes" class="field-input" placeholder="Optional observations" rows="2"></textarea>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="form-actions">
+        <button class="action-btn green" onclick="RBPreweighed.submitSample()">✓ Confirm Sample Taken</button>
+    </div>
+
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text" id="loadingText">Recording...</div>
+    </div>
+
+    <!-- Label overlay -->
+    <div id="pwLabelOverlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.92); z-index:9999; align-items:center; justify-content:center; padding:20px;">
+        <div style="background:#14192e; border-radius:16px; padding:8px; border:2px solid #d4af37; width:100%; max-width:380px;">
+            <div id="pwLabelContent"></div>
+            <div style="display:flex; gap:10px; padding:16px;">
+                <button onclick="RBPreweighed.closeLabel()" class="action-btn blue" style="width:100%;">✓ Done</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/offline.js"></script>
+    <script src="js/app.js"></script>
+    <script src="js/preweighed.js"></script>
+    <script src="js/escpos.js"></script>
+    <script src="js/printers.js"></script>
+    <script src="js/label-templates.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            RBPreweighed.initSamplePage();
+        });
+    </script>
+</body>
+</html>
