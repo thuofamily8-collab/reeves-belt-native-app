@@ -43,12 +43,8 @@ jobs:
       - name: Install npm dependencies
         run: npm install
 
-      # --- Disable USB transport in thermal printer plugin ---
-      # The plugin's Kotlin code references a USB serial library
-      # (@hoho and @mik3y). We strip both the Gradle dependency and
-      # disable the Kotlin file that uses them. Bluetooth + TCP work
-      # without any of this.
-      - name: Disable USB transport in thermal printer plugin
+      # --- Disable the entire Balanza (USB serial) module in the plugin ---
+      - name: Disable Balanza USB module
         run: |
           PLUGIN_DIR="node_modules/@devlas/capacitor-thermal-printer/android"
           PLUGIN_GRADLE="$PLUGIN_DIR/build.gradle"
@@ -65,21 +61,17 @@ jobs:
           echo "=== Plugin build.gradle AFTER patch ==="
           cat "$PLUGIN_GRADLE" || echo "(not found)"
 
-          # Disable the Kotlin file that imports the USB library.
-          # Renaming .kt -> .kt.disabled hides it from the Kotlin compiler.
-          USB_KT="$PLUGIN_DIR/src/main/java/app/devlas/plugins/thermalprinter/BalanzaSerialTransport.kt"
-          if [ -f "$USB_KT" ]; then
-            echo "Renaming USB transport file to disable it"
-            mv "$USB_KT" "${USB_KT}.disabled"
-          fi
+          # Disable ALL Kotlin files that reference the missing USB classes
+          echo "=== Scanning for USB-dependent Kotlin files ==="
+          find "$PLUGIN_DIR/src/main/java" -name "*.kt" | while read f; do
+            if grep -qE "BalanzaSerial|UsbSerialPort|UsbSerialProber|UsbSerialDriver|SerialInputOutputManager|hoho" "$f" 2>/dev/null; then
+              echo "Disabling: $f"
+              mv "$f" "${f}.disabled"
+            fi
+          done
 
-          # Also scan for any other Kotlin file that imports the USB libs
-          grep -rl "UsbSerialPort\|UsbSerialProber\|hoho" \
-               "$PLUGIN_DIR/src/main/java/" 2>/dev/null \
-            | while read f; do
-                echo "Disabling USB-dependent file: $f"
-                mv "$f" "${f}.disabled"
-              done
+          echo "=== Remaining .kt files ==="
+          find "$PLUGIN_DIR/src/main/java" -name "*.kt" -exec basename {} \;
 
       - name: Add Android platform
         run: |
