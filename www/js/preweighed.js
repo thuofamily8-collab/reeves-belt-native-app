@@ -2,7 +2,6 @@
  * ============================================================
  * REEVES BELT APP - PRE-WEIGHED TRUCKS UI
  * ============================================================
- * Handles both flat and nested response shapes from the server.
  */
 
 var RBPreweighed = (function () {
@@ -34,13 +33,10 @@ var RBPreweighed = (function () {
         if (!silent) showLoading('Loading trucks...');
 
         var params = {};
-
         var dateEl = document.getElementById('pwFilterDate');
         if (dateEl && dateEl.value) params.date = dateEl.value;
-
         var statusEl = document.getElementById('pwFilterStatus');
         if (statusEl && statusEl.value) params.status = statusEl.value;
-
         var plateEl = document.getElementById('pwFilterPlate');
         if (plateEl && plateEl.value) params.plate = plateEl.value;
 
@@ -143,9 +139,7 @@ var RBPreweighed = (function () {
 
         RBApi.preweighedCreate(payload).then(function (res) {
             hideLoading();
-            var code = res.unique_code
-                    || (res.data && res.data.unique_code)
-                    || '—';
+            var code = res.unique_code || (res.data && res.data.unique_code) || '—';
             if (navigator.vibrate) navigator.vibrate(150);
             showToast('✅ Recorded. Code: ' + code, 'success');
             setTimeout(function () {
@@ -153,7 +147,6 @@ var RBPreweighed = (function () {
             }, 1200);
         }).catch(function (err) {
             hideLoading();
-            console.error('[preweighed] create failed:', err);
             var msg = err && (err.error || err.message) ? (err.error || err.message) : 'network error';
             showToast('Failed: ' + msg, 'error');
         });
@@ -213,9 +206,7 @@ var RBPreweighed = (function () {
         setText('pwDetailNotes', t.notes || '—');
 
         var statusEl = document.getElementById('pwDetailStatus');
-        if (statusEl) {
-            statusEl.style.background = statusToColor(t.status);
-        }
+        if (statusEl) statusEl.style.background = statusToColor(t.status);
 
         var sampleBtn = document.getElementById('pwSampleBtn');
         if (sampleBtn) {
@@ -283,18 +274,31 @@ var RBPreweighed = (function () {
         box.style.display = 'block';
     }
 
+    // ----------------------------------------------------------
+    // CALL IN (creates pending vehicle entry)
+    // ----------------------------------------------------------
     function callIn(truckId) {
         if (!confirm('Call this truck in to the weighbridge?')) return;
-        showLoading('Updating...');
-        RBApi.preweighedUpdateStatus(truckId, 'called_in').then(function () {
+        showLoading('Calling in truck...');
+        RBApi.preweighedCallIn(truckId).then(function (res) {
             hideLoading();
-            showToast('✅ Truck called in', 'success');
-            setTimeout(function () {
-                window.location.href = 'preweighed-list.html';
-            }, 800);
+            if (navigator.vibrate) navigator.vibrate(150);
+            var pendingId = res.pending_entry_id || (res.data && res.data.pending_entry_id);
+            showToast('✅ Truck called in — awaiting capture', 'success');
+
+            if (pendingId) {
+                setTimeout(function () {
+                    window.location.href = 'vehicle-entry.html?pending=' + pendingId;
+                }, 900);
+            } else {
+                setTimeout(function () {
+                    window.location.href = 'preweighed-list.html';
+                }, 900);
+            }
         }).catch(function (err) {
             hideLoading();
-            showToast('Failed: ' + (err.error || 'network error'), 'error');
+            var msg = err && (err.error || err.message) ? (err.error || err.message) : 'network error';
+            showToast('Failed: ' + msg, 'error');
         });
     }
 
@@ -357,7 +361,6 @@ var RBPreweighed = (function () {
             notes: notes || null
         }).then(function (res) {
             hideLoading();
-            // Server returns flat shape
             var labelData = res.label_data
                          || (res.data && res.data.label_data)
                          || {
@@ -370,7 +373,6 @@ var RBPreweighed = (function () {
             showLabel({ label_data: labelData });
         }).catch(function (err) {
             hideLoading();
-            console.error('[preweighed] sample failed:', err);
             var msg = err && (err.error || err.message) ? (err.error || err.message) : 'network error';
             showToast('Failed: ' + msg, 'error');
         });
@@ -381,9 +383,7 @@ var RBPreweighed = (function () {
         var label   = document.getElementById('pwLabelContent');
         if (!overlay || !label) {
             showToast('✅ Sample recorded', 'success');
-            setTimeout(function () {
-                window.location.href = 'preweighed-list.html';
-            }, 800);
+            setTimeout(function () { window.location.href = 'preweighed-list.html'; }, 800);
             return;
         }
 
@@ -401,7 +401,6 @@ var RBPreweighed = (function () {
 
         overlay.style.display = 'flex';
 
-        // Attempt print to configured BT POS printer
         if (typeof RBPrinters !== 'undefined' && typeof RBLabels !== 'undefined') {
             try {
                 var bytes = RBLabels.sampleLabel({
@@ -427,9 +426,7 @@ var RBPreweighed = (function () {
     function closeLabel() {
         var overlay = document.getElementById('pwLabelOverlay');
         if (overlay) overlay.style.display = 'none';
-        setTimeout(function () {
-            window.location.href = 'preweighed-list.html';
-        }, 300);
+        setTimeout(function () { window.location.href = 'preweighed-list.html'; }, 300);
     }
 
     // ----------------------------------------------------------
