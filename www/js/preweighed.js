@@ -290,9 +290,18 @@ var RBPreweighed = (function () {
                 '</div>';
         }
 
-        var samplingNote = !t.requires_sampling
-            ? '<div style="margin-top:10px; padding:8px 12px; background:rgba(16,185,129,0.15); border-left:3px solid #10b981; border-radius:6px; font-size:11px; color:#a7f3d0;">⚡ This truck does not require sampling — call in directly.</div>'
-            : '';
+        // Contextual sampling note
+        var samplingNote = '';
+        if (t.requires_sampling === false) {
+            // Registered as non-sampled (construction materials, machinery, etc.)
+            samplingNote = '<div style="margin-top:10px; padding:8px 12px; background:rgba(16,185,129,0.15); border-left:3px solid #10b981; border-radius:6px; font-size:11px; color:#a7f3d0;">⚡ This truck was registered as non-sampled — call in directly.</div>';
+        } else if (t.requires_sampling === true && data.sample) {
+            // Sampled — sample is on file
+            samplingNote = '<div style="margin-top:10px; padding:8px 12px; background:rgba(16,185,129,0.15); border-left:3px solid #10b981; border-radius:6px; font-size:11px; color:#a7f3d0;">✓ Sample already on file — safe to call in.</div>';
+        } else if (t.requires_sampling === true && !data.sample) {
+            // Sampled type but no sample yet — warn
+            samplingNote = '<div style="margin-top:10px; padding:8px 12px; background:rgba(245,158,11,0.15); border-left:3px solid #f59e0b; border-radius:6px; font-size:11px; color:#fde68a;">⚠️ Sample required before calling in — take a sample first.</div>';
+        }
 
         box.innerHTML =
             '<div style="background:#0a192f; border:2px solid #10b981; border-radius:12px; padding:16px; margin-top:14px;">' +
