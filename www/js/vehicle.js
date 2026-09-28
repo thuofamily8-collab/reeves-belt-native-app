@@ -265,4 +265,82 @@ function submitEntry() {
     var data = {
         plate_number: plate,
         vehicle_type: vehicleType,
-       
+        vehicle_model: document.getElementById('vehicleModel').value.trim(),
+        vehicle_color: document.getElementById('vehicleColor').value.trim(),
+        driver_name: driverName,
+        driver_id: driverId,
+        driver_phone: driverPhone,
+        purpose: purpose,
+        entry_weight_kg: entryWeight,
+        entry_comment: entryComment,
+        vehicle_photo_data: capturedPhotoData,
+        photo_captured_at: capturedTimestamp,
+        sync_hash: generateSyncHash()
+    };
+
+    // If prefilled from a pending capture, mark it complete FIRST
+    if (pendingEntryId) {
+        RBApi.completeVehicleEntry({
+            entry_id: pendingEntryId,
+            vehicle_model: data.vehicle_model,
+            vehicle_color: data.vehicle_color
+        }).then(function () {
+            console.log('[vehicle-entry] Pending capture completed');
+            continueWithQueue();
+        }).catch(function (e) {
+            console.warn('[vehicle-entry] Could not complete pending:', e);
+            continueWithQueue();
+        });
+    } else {
+        continueWithQueue();
+    }
+
+    function continueWithQueue() {
+        OfflineSync.queueRecord('vehicle_entry', data);
+
+        OfflineSync.syncNow().then(function (result) {
+            hideLoading();
+            if (result.synced > 0) {
+                showToast('✅ Entry recorded and synced', 'success');
+            } else {
+                showToast('💾 Saved locally - will sync when online', 'warning');
+            }
+
+            if (navigator.vibrate) navigator.vibrate(200);
+
+            setTimeout(function () {
+                window.location.href = 'dashboard.html';
+            }, 1200);
+        });
+    }
+}
+
+function voidEntry() {
+    if (confirm('Void this entry? All entered data will be lost.')) {
+        window.location.href = 'dashboard.html';
+    }
+}
+
+function generateSyncHash() {
+    return 'sync-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+}
+
+function showLoading(text) {
+    var el = document.getElementById('loadingText');
+    if (el) el.textContent = text;
+    var overlay = document.getElementById('loadingOverlay');
+    if (overlay) overlay.classList.add('show');
+}
+
+function hideLoading() {
+    var overlay = document.getElementById('loadingOverlay');
+    if (overlay) overlay.classList.remove('show');
+}
+
+function showToast(message, type) {
+    if (typeof RBApp !== 'undefined' && RBApp.showToast) {
+        RBApp.showToast(message, type);
+    } else {
+        alert(message);
+    }
+}
