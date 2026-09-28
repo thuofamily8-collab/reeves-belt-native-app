@@ -13,13 +13,21 @@ var RBApp = (function() {
         if (!window.Capacitor || !Capacitor.Plugins || !Capacitor.Plugins.App) return;
 
         var BACK_MAP = {
+            // Pre-weighed trucks
             'preweighed-list.html':   'dashboard.html',
             'preweighed-add.html':    'preweighed-list.html',
             'preweighed-detail.html': 'preweighed-list.html',
             'preweighed-sample.html': 'preweighed-list.html',
             'preweighed-reveal.html': 'preweighed-list.html',
-            'alcohol-test.html':      'dashboard.html',
-            'employee-clock.html':    'dashboard.html',
+
+            // Alcohol testing + employees
+            'alcohol-test-form.html': 'alcohol-list.html',
+            'alcohol-list.html':      'dashboard.html',
+            'alcohol-settings.html':  'dashboard.html',
+            'employees-list.html':    'dashboard.html',
+            'employee-add.html':      'employees-list.html',
+
+            // Core gate
             'vehicle-entry.html':     'dashboard.html',
             'vehicle-exit.html':      'dashboard.html',
             'visitor-checkin.html':   'dashboard.html',
