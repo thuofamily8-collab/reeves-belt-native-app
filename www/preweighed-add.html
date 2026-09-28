@@ -42,6 +42,9 @@
                         <option value="Sorghum">Sorghum</option>
                         <option value="Soya">Soya</option>
                         <option value="Rice">Rice</option>
+                        <option value="Construction Materials">Construction Materials</option>
+                        <option value="Machinery">Machinery</option>
+                        <option value="Fuel">Fuel</option>
                         <option value="Other">Other</option>
                     </select>
                 </div>
@@ -49,6 +52,16 @@
                     <label class="field-label">Declared Weight (kg)</label>
                     <input type="number" id="pwWeight" class="field-input" placeholder="e.g. 28000" inputmode="numeric">
                 </div>
+            </div>
+
+            <div class="field" style="margin-top:14px;">
+                <label style="display:flex; align-items:center; gap:12px; cursor:pointer; padding:12px 14px; background:#0e0e18; border:1px solid #2a3155; border-radius:10px;">
+                    <input type="checkbox" id="pwRequiresSampling" checked style="width:20px; height:20px; accent-color:#d4af37; flex-shrink:0;">
+                    <div>
+                        <div style="font-size:13px; font-weight:700; color:#fff;">Requires Sampling</div>
+                        <div style="font-size:11px; color:#8892b0; margin-top:2px;">Uncheck for construction materials, machinery, fuel, etc.</div>
+                    </div>
+                </label>
             </div>
         </div>
 
