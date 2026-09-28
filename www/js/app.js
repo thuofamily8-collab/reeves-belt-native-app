@@ -12,7 +12,6 @@ var RBApp = (function() {
     function initBackButton() {
         if (!window.Capacitor || !Capacitor.Plugins || !Capacitor.Plugins.App) return;
 
-        // Routes: page → back destination
         var BACK_MAP = {
             'preweighed-list.html':   'dashboard.html',
             'preweighed-add.html':    'preweighed-list.html',
