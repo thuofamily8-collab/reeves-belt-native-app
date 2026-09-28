@@ -37,8 +37,22 @@ var RBPreweighed = (function () {
         var params = {};
         var dateEl = document.getElementById('pwFilterDate');
         if (dateEl && dateEl.value) params.date = dateEl.value;
+
         var statusEl = document.getElementById('pwFilterStatus');
-        if (statusEl && statusEl.value) params.status = statusEl.value;
+        var statusVal = statusEl ? statusEl.value : '';
+
+        if (statusVal === '__all__') {
+            // Show all — no date filter, no status filter, no active filter
+            params.date = 'all';
+            params.active_only = 0;
+        } else if (statusVal) {
+            // Specific status
+            params.status = statusVal;
+        } else {
+            // Default: active only (parked + sampled)
+            params.active_only = 1;
+        }
+
         var plateEl = document.getElementById('pwFilterPlate');
         if (plateEl && plateEl.value) params.plate = plateEl.value;
 
@@ -46,10 +60,29 @@ var RBPreweighed = (function () {
             hideLoading();
             var trucks = (res && res.trucks) || (res.data && res.data.trucks) || [];
             renderList(trucks);
+
+            var badge = document.getElementById('pwActiveBadge');
+            if (badge) {
+                var isActiveView = !statusVal || statusVal === 'parked' || statusVal === 'sampled';
+                if (isActiveView) {
+                    badge.textContent = '● ACTIVE YARD (' + trucks.length + ')';
+                    badge.style.color = '#10b981';
+                } else if (statusVal === '__all__') {
+                    badge.textContent = '○ SHOWING ALL (' + trucks.length + ')';
+                    badge.style.color = '#8892b0';
+                } else {
+                    badge.textContent = '○ ' + (trucks.length) + ' shown';
+                    badge.style.color = '#8892b0';
+                }
+            }
         }).catch(function (err) {
             hideLoading();
             showToast('Failed to load: ' + (err.error || 'network error'), 'error');
         });
+    }
+
+    function applyFilters() {
+        loadList();
     }
 
     function renderList(trucks) {
@@ -71,15 +104,20 @@ var RBPreweighed = (function () {
             var t = trucks[i];
             var statusColor = statusToColor(t.status);
             var statusLabel = statusToLabel(t.status);
-            var samplingBadge = t.requires_sampling
-                ? '<div style="display:inline-block; margin-top:8px; padding:3px 8px; background:rgba(245,158,11,0.2); border:1px solid #f59e0b; border-radius:6px; font-size:10px; color:#f59e0b; font-weight:700; letter-spacing:1px;">🧪 SAMPLE REQUIRED</div>'
-                : '<div style="display:inline-block; margin-top:8px; padding:3px 8px; background:rgba(16,185,129,0.2); border:1px solid #10b981; border-radius:6px; font-size:10px; color:#10b981; font-weight:700; letter-spacing:1px;">⚡ DIRECT CALL-IN</div>';
+
+            // Sampling badge — only show for active trucks
+            var samplingBadge = '';
+            if (t.status === 'parked' || t.status === 'sampled') {
+                samplingBadge = t.requires_sampling
+                    ? '<div style="display:inline-block; margin-top:8px; padding:3px 8px; background:rgba(245,158,11,0.2); border:1px solid #f59e0b; border-radius:6px; font-size:10px; color:#f59e0b; font-weight:700; letter-spacing:1px;">🧪 SAMPLE REQUIRED</div>'
+                    : '<div style="display:inline-block; margin-top:8px; padding:3px 8px; background:rgba(16,185,129,0.2); border:1px solid #10b981; border-radius:6px; font-size:10px; color:#10b981; font-weight:700; letter-spacing:1px;">⚡ DIRECT CALL-IN</div>';
+            }
 
             html +=
                 '<div class="vehicle-info-card" onclick="RBPreweighed.openDetail(' + t.id + ')" style="cursor:pointer;">' +
                     '<div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">' +
                         '<div class="vehicle-info-plate" style="font-size:18px;">' + escapeHtml(t.vehicle_plate) + '</div>' +
-                        '<div style="background:' + statusColor + '; color:#fff; font-size:10px; font-weight:800; letter-spacing:1px; padding:4px 8px; border-radius:6px; text-transform:uppercase;">' +
+                        '<div style="background:' + statusColor + '; color:#fff; font-size:10px; font-weight:800; letter-spacing:1px; padding:4px 8px; border-radius:6px; text-transform:uppercase; max-width:140px; text-align:center; line-height:1.2;">' +
                             statusLabel +
                         '</div>' +
                     '</div>' +
@@ -112,8 +150,8 @@ var RBPreweighed = (function () {
         switch (s) {
             case 'parked':    return 'PARKED';
             case 'sampled':   return 'SAMPLED';
-            case 'called_in': return 'CALLED IN';
-            case 'weighed':   return 'WEIGHED';
+            case 'called_in': return 'CALLED · NOT AT YARD';
+            case 'weighed':   return 'WEIGHED (INSIDE)';
             case 'departed':  return 'DEPARTED';
             case 'cancelled': return 'CANCELLED';
             default:          return String(s).toUpperCase();
@@ -217,7 +255,6 @@ var RBPreweighed = (function () {
         var statusEl = document.getElementById('pwDetailStatus');
         if (statusEl) statusEl.style.background = statusToColor(t.status);
 
-        // Sampling status display
         var samplingEl = document.getElementById('pwDetailSampling');
         if (samplingEl) {
             if (t.requires_sampling) {
@@ -229,7 +266,6 @@ var RBPreweighed = (function () {
             }
         }
 
-        // Sample button gating
         var sampleBtn = document.getElementById('pwSampleBtn');
         if (sampleBtn) {
             if (!t.requires_sampling) {
@@ -290,16 +326,12 @@ var RBPreweighed = (function () {
                 '</div>';
         }
 
-        // Contextual sampling note
         var samplingNote = '';
         if (t.requires_sampling === false) {
-            // Registered as non-sampled (construction materials, machinery, etc.)
             samplingNote = '<div style="margin-top:10px; padding:8px 12px; background:rgba(16,185,129,0.15); border-left:3px solid #10b981; border-radius:6px; font-size:11px; color:#a7f3d0;">⚡ This truck was registered as non-sampled — call in directly.</div>';
         } else if (t.requires_sampling === true && data.sample) {
-            // Sampled — sample is on file
             samplingNote = '<div style="margin-top:10px; padding:8px 12px; background:rgba(16,185,129,0.15); border-left:3px solid #10b981; border-radius:6px; font-size:11px; color:#a7f3d0;">✓ Sample already on file — safe to call in.</div>';
         } else if (t.requires_sampling === true && !data.sample) {
-            // Sampled type but no sample yet — warn
             samplingNote = '<div style="margin-top:10px; padding:8px 12px; background:rgba(245,158,11,0.15); border-left:3px solid #f59e0b; border-radius:6px; font-size:11px; color:#fde68a;">⚠️ Sample required before calling in — take a sample first.</div>';
         }
 
@@ -319,7 +351,7 @@ var RBPreweighed = (function () {
     }
 
     // ----------------------------------------------------------
-    // CALL IN (creates pending vehicle entry)
+    // CALL IN
     // ----------------------------------------------------------
     function callIn(truckId) {
         if (!confirm('Call this truck in to the weighbridge?')) return;
@@ -540,6 +572,7 @@ var RBPreweighed = (function () {
 
     return {
         initListPage:   initListPage,
+        applyFilters:   applyFilters,
         initAddPage:    initAddPage,
         initDetailPage: initDetailPage,
         initSamplePage: initSamplePage,
