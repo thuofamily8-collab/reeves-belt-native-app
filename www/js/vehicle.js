@@ -2,11 +2,82 @@
  * ============================================================
  * VEHICLE ENTRY LOGIC
  * ============================================================
+ * Supports ?pending=N to pre-fill from a called-in pre-weighed truck.
  */
 
 var vehicleStream = null;
 var capturedPhotoData = '';
 var capturedTimestamp = '';
+var pendingEntryId = null;
+
+// ============================================================
+// PREFILL FROM PENDING CAPTURE
+// ============================================================
+document.addEventListener('DOMContentLoaded', function () {
+    var params = new URLSearchParams(window.location.search);
+    var pending = parseInt(params.get('pending'), 10);
+    if (!pending) return;
+
+    pendingEntryId = pending;
+
+    var badge = document.getElementById('prefillBadge');
+    if (badge) badge.style.display = 'block';
+
+    RBApi.getPendingCaptureDetail(pending).then(function (res) {
+        var entry = res.entry || (res.data && res.data.entry);
+        var preweighed = res.preweighed || (res.data && res.data.preweighed);
+        if (!entry) return;
+
+        setValue('plateNumber', entry.vehicle_plate);
+        setValue('driverName', entry.driver_name);
+        setValue('driverPhone', entry.driver_phone);
+        setValue('vehicleModel', entry.vehicle_model || '');
+        setValue('vehicleColor', entry.vehicle_color || '');
+        setValue('entryWeight', entry.entry_weight_kg || '');
+        setValue('entryComment', entry.entry_comment || '');
+
+        if (entry.vehicle_type) {
+            var typeEl = document.getElementById('vehicleType');
+            if (typeEl) {
+                for (var i = 0; i < typeEl.options.length; i++) {
+                    if (typeEl.options[i].value === entry.vehicle_type) {
+                        typeEl.selectedIndex = i;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (entry.purpose) {
+            var purposeEl = document.getElementById('purpose');
+            if (purposeEl) {
+                for (var j = 0; j < purposeEl.options.length; j++) {
+                    if (purposeEl.options[j].value === entry.purpose) {
+                        purposeEl.selectedIndex = j;
+                        break;
+                    }
+                }
+            }
+        }
+
+        var codeEl = document.getElementById('prefillCode');
+        if (codeEl && entry.preweighed_code) {
+            codeEl.textContent = entry.preweighed_code;
+        } else if (codeEl && preweighed && preweighed.unique_code) {
+            codeEl.textContent = preweighed.unique_code;
+        }
+    }).catch(function (err) {
+        console.warn('[vehicle-entry] Could not load pending capture:', err);
+        if (typeof RBApp !== 'undefined') {
+            RBApp.showToast('Could not load pending details — enter manually', 'warning');
+        }
+    });
+});
+
+function setValue(id, val) {
+    var el = document.getElementById(id);
+    if (el && val !== null && val !== undefined) el.value = val;
+}
 
 // ============================================================
 // LIVE TIMESTAMP
@@ -47,7 +118,7 @@ function startCamera() {
         video: { facingMode: 'environment', width: { ideal: 1280 } },
         audio: false
     })
-    .then(function(stream) {
+    .then(function (stream) {
         vehicleStream = stream;
         video.srcObject = stream;
         video.style.display = 'block';
@@ -57,7 +128,7 @@ function startCamera() {
         startBtn.textContent = '⏹ Stop';
         captureBtn.disabled = false;
     })
-    .catch(function(err) {
+    .catch(function (err) {
         showToast('Cannot access camera: ' + err.message, 'error');
     });
 }
@@ -72,22 +143,18 @@ function useNativeCamera() {
         width: 1024,
         height: 1024
     })
-    .then(function(photo) {
+    .then(function (photo) {
         capturedPhotoData = photo.dataUrl;
         showCapturedPhoto(photo.dataUrl);
     })
-    .catch(function(err) {
+    .catch(function (err) {
         showToast('Camera error: ' + err.message, 'error');
     });
 }
 
 function capturePhoto() {
     var video = document.getElementById('cameraVideo');
-
-    if (!video.videoWidth) {
-        showToast('Camera not ready', 'error');
-        return;
-    }
+    if (!video.videoWidth) { showToast('Camera not ready', 'error'); return; }
 
     var canvas = document.createElement('canvas');
     canvas.width = video.videoWidth;
@@ -107,7 +174,7 @@ function capturePhoto() {
     capturedPhotoData = canvas.toDataURL('image/jpeg', 0.85);
 
     if (vehicleStream) {
-        vehicleStream.getTracks().forEach(function(t) { t.stop(); });
+        vehicleStream.getTracks().forEach(function (t) { t.stop(); });
         vehicleStream = null;
     }
 
@@ -198,60 +265,4 @@ function submitEntry() {
     var data = {
         plate_number: plate,
         vehicle_type: vehicleType,
-        vehicle_model: document.getElementById('vehicleModel').value.trim(),
-        vehicle_color: document.getElementById('vehicleColor').value.trim(),
-        driver_name: driverName,
-        driver_id: driverId,
-        driver_phone: driverPhone,
-        purpose: purpose,
-        entry_weight_kg: entryWeight,
-        entry_comment: entryComment,
-        vehicle_photo_data: capturedPhotoData,
-        photo_captured_at: capturedTimestamp,
-        sync_hash: generateSyncHash()
-    };
-
-    OfflineSync.queueRecord('vehicle_entry', data);
-
-    OfflineSync.syncNow().then(function(result) {
-        hideLoading();
-        if (result.synced > 0) {
-            showToast('✅ Entry recorded and synced', 'success');
-        } else {
-            showToast('💾 Saved locally - will sync when online', 'warning');
-        }
-
-        if (navigator.vibrate) navigator.vibrate(200);
-
-        setTimeout(function() {
-            window.location.href = 'dashboard.html';
-        }, 1200);
-    });
-}
-
-function voidEntry() {
-    if (confirm('Void this entry? All entered data will be lost.')) {
-        window.location.href = 'dashboard.html';
-    }
-}
-
-function generateSyncHash() {
-    return 'sync-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
-}
-
-function showLoading(text) {
-    document.getElementById('loadingText').textContent = text;
-    document.getElementById('loadingOverlay').classList.add('show');
-}
-
-function hideLoading() {
-    document.getElementById('loadingOverlay').classList.remove('show');
-}
-
-function showToast(message, type) {
-    if (typeof RBApp !== 'undefined' && RBApp.showToast) {
-        RBApp.showToast(message, type);
-    } else {
-        alert(message);
-    }
-}
+       
