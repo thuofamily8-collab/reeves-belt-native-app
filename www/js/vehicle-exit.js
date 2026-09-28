@@ -74,6 +74,12 @@ function renderVehicles(vehicles) {
             ? '<span style="background:#f59e0b; color:#fff; padding:2px 6px; border-radius:8px; font-size:9px; margin-left:5px;">LOCAL</span>'
             : '';
 
+        // NEW: pre-weighed badge — shown when this vehicle came from a
+        // called-in pre-weighed truck
+        var preweighedBadge = v.preweighed_code
+            ? '<div style="display:inline-block; margin-top:8px; padding:3px 8px; background:rgba(212,175,55,0.15); border:1px solid rgba(212,175,55,0.4); border-radius:6px; font-size:10px; color:#f0d060; font-weight:700; letter-spacing:1px;">📥 PRE-WEIGHED · ' + escapeHtml(v.preweighed_code) + '</div>'
+            : '';
+
         html +=
             '<div class="vehicle-info-card" onclick="openExitModal(' + JSON.stringify(JSON.stringify(v)).replace(/"/g, '&quot;') + ')">' +
                 '<div class="vehicle-info-plate">' + escapeHtml(v.plate_number) + offlineBadge + '</div>' +
@@ -81,6 +87,7 @@ function renderVehicles(vehicles) {
                 '<div class="vehicle-info-detail">📋 ' + escapeHtml(v.purpose || '—') + '</div>' +
                 '<div class="vehicle-info-detail">🕐 Entry: ' + entryTime + '</div>' +
                 '<div class="vehicle-info-weight">⚖️ ' + formatNumber(v.entry_weight_kg) + ' KG</div>' +
+                preweighedBadge +
             '</div>';
     }
 
