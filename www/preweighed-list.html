@@ -29,12 +29,14 @@
                 <div class="field">
                     <label class="field-label">Status</label>
                     <select id="pwFilterStatus" class="field-input">
-                        <option value="">All</option>
+                        <option value="" selected>Active (Yard)</option>
                         <option value="parked">Parked</option>
                         <option value="sampled">Sampled</option>
-                        <option value="called_in">Called In</option>
-                        <option value="weighed">Weighed</option>
+                        <option value="called_in">Called / Not at Yard</option>
+                        <option value="weighed">Weighed (Inside)</option>
                         <option value="departed">Departed</option>
+                        <option value="cancelled">Cancelled</option>
+                        <option value="__all__">Show All</option>
                     </select>
                 </div>
             </div>
@@ -42,7 +44,7 @@
                 <label class="field-label">Plate (partial)</label>
                 <input type="text" id="pwFilterPlate" class="field-input" placeholder="e.g. KDV" style="text-transform:uppercase;">
             </div>
-            <button type="button" onclick="RBPreweighed.initListPage()" class="action-btn blue" style="width:100%; margin-top:10px;">Apply Filters</button>
+            <button type="button" onclick="RBPreweighed.applyFilters()" class="action-btn blue" style="width:100%; margin-top:10px;">Apply Filters</button>
         </div>
 
         <div style="margin: 0 0 14px;">
@@ -53,7 +55,10 @@
             <a href="preweighed-reveal.html" class="action-btn blue" style="flex:1; text-align:center; text-decoration:none;">🔍 Reveal Code</a>
         </div>
 
-        <div class="app-section-title" style="padding-left:5px; margin-bottom:12px;">Trucks in Yard</div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <div class="app-section-title" style="padding-left:5px; margin:0;">Trucks in Yard</div>
+            <div id="pwActiveBadge" style="font-size:10px; color:#10b981; font-weight:700; letter-spacing:1px;">● ACTIVE</div>
+        </div>
         <div id="pwList">
             <div class="empty-state"><p>Loading...</p></div>
         </div>
@@ -72,7 +77,6 @@
     <script src="js/preweighed.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            // Default date to today
             var dateEl = document.getElementById('pwFilterDate');
             if (dateEl) {
                 var now = new Date();
@@ -80,6 +84,15 @@
                     String(now.getMonth() + 1).padStart(2, '0') + '-' +
                     String(now.getDate()).padStart(2, '0');
             }
+
+            // Refresh on filter change
+            var statusEl = document.getElementById('pwFilterStatus');
+            if (statusEl) {
+                statusEl.addEventListener('change', function () {
+                    RBPreweighed.applyFilters();
+                });
+            }
+
             RBPreweighed.initListPage();
         });
     </script>
