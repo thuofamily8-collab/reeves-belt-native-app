@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#0a192f">
+    <title>Alcohol Settings - Reeves Belt App</title>
+    <link rel="stylesheet" href="css/app.css">
+    <link rel="stylesheet" href="css/forms.css">
+</head>
+<body class="form-page">
+
+<div class="network-bar" id="networkBar"></div>
+
+<div class="form-container">
+
+    <div class="form-header">
+        <button class="back-btn" onclick="window.location.href='dashboard.html'">←</button>
+        <div class="form-header-title">⚙️ Alcohol Settings</div>
+    </div>
+
+    <div class="info-banner warning">
+        <strong>Admin only:</strong> These thresholds determine how test readings are classified.
+    </div>
+
+    <div class="form-card">
+        <div class="form-card-title">Classification Thresholds (mg/100mL)</div>
+        <div class="field">
+            <label class="field-label">PASS — readings below this are PASS</label>
+            <input type="number" id="setPass" class="field-input" placeholder="0.000" step="0.001" min="0">
+        </div>
+        <div class="field">
+            <label class="field-label">WARN — readings at or above this are WARN</label>
+            <input type="number" id="setWarn" class="field-input" placeholder="0.050" step="0.001" min="0">
+        </div>
+        <div class="field">
+            <label class="field-label">FAIL — readings at or above this are FAIL</label>
+            <input type="number" id="setFail" class="field-input" placeholder="0.080" step="0.001" min="0">
+        </div>
+    </div>
+
+    <div class="form-card">
+        <div class="form-card-title">Behavior</div>
+        <div class="field">
+            <label class="field-label">Retest window (seconds)</label>
+            <input type="number" id="setRetest" class="field-input" placeholder="300" min="0">
+        </div>
+        <div class="field">
+            <label class="field-label">Block on fail</label>
+            <select id="setBlockOnFail" class="field-input">
+                <option value="0">No — just record</option>
+                <option value="1">Yes — flag as blocked</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="form-card">
+        <div class="form-card-title">Device (Phase 2 integration)</div>
+        <div class="field">
+            <label class="field-label">Device Model</label>
+            <input type="text" id="setDeviceModel" class="field-input" placeholder="AlcoBlowPRO">
+        </div>
+        <div class="field">
+            <label class="field-label">Device Serial</label>
+            <input type="text" id="setDeviceSerial" class="field-input" placeholder="Serial number when known">
+        </div>
+    </div>
+
+    <div class="form-card">
+        <div class="form-card-title">Notes</div>
+        <div class="field">
+            <textarea id="setNotes" class="field-input" rows="2" placeholder="Optional admin notes"></textarea>
+        </div>
+    </div>
+
+</div>
+
+<div class="form-actions">
+    <button class="action-btn green" onclick="RBAlcohol.saveSettings()">💾 Save Settings</button>
+</div>
+
+<div id="loadingOverlay" class="loading-overlay">
+    <div class="loading-spinner"></div>
+    <div class="loading-text" id="loadingText">Loading...</div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/offline.js"></script>
+<script src="js/app.js"></script>
+<script src="js/alcohol.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        RBAlcohol.initSettings();
+    });
+</script>
+
+</body>
+</html>
