@@ -11,11 +11,13 @@ var currentVehicle = null;
 // ============================================================
 function loadVehiclesInside() {
     var container = document.getElementById('vehiclesList');
+    if (!container) return;
+
     container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🚛</div><p>Loading vehicles...</p></div>';
 
     RBApi.getVehiclesInside()
         .then(function(res) {
-            var vehicles = res.vehicles || res.data || [];
+            var vehicles = res.vehicles || (res.data && res.data.vehicles) || res.data || [];
             renderVehicles(vehicles);
         })
         .catch(function(err) {
@@ -56,6 +58,7 @@ function getOfflineQueuedVehicles() {
 
 function renderVehicles(vehicles) {
     var container = document.getElementById('vehiclesList');
+    if (!container) return;
 
     if (!vehicles || vehicles.length === 0) {
         container.innerHTML =
@@ -74,8 +77,7 @@ function renderVehicles(vehicles) {
             ? '<span style="background:#f59e0b; color:#fff; padding:2px 6px; border-radius:8px; font-size:9px; margin-left:5px;">LOCAL</span>'
             : '';
 
-        // NEW: pre-weighed badge — shown when this vehicle came from a
-        // called-in pre-weighed truck
+        // Pre-weighed badge
         var preweighedBadge = v.preweighed_code
             ? '<div style="display:inline-block; margin-top:8px; padding:3px 8px; background:rgba(212,175,55,0.15); border:1px solid rgba(212,175,55,0.4); border-radius:6px; font-size:10px; color:#f0d060; font-weight:700; letter-spacing:1px;">📥 PRE-WEIGHED · ' + escapeHtml(v.preweighed_code) + '</div>'
             : '';
