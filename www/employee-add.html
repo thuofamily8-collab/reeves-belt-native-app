@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#0a192f">
+    <title>Employee - Reeves Belt App</title>
+    <link rel="stylesheet" href="css/app.css">
+    <link rel="stylesheet" href="css/forms.css">
+</head>
+<body class="form-page">
+
+<div class="network-bar" id="networkBar"></div>
+
+<div class="form-container">
+
+    <div class="form-header">
+        <button class="back-btn" onclick="window.location.href='employees-list.html'">←</button>
+        <div class="form-header-title">➕ Add Employee</div>
+    </div>
+
+    <form id="employeeForm" autocomplete="off">
+
+        <div class="form-card">
+            <div class="form-card-title">Identity</div>
+            <div class="field">
+                <label class="field-label">Full Name *</label>
+                <input type="text" id="empFullName" class="field-input" placeholder="e.g. John Mwangi">
+            </div>
+            <div class="field">
+                <label class="field-label">ID Number *</label>
+                <input type="text" id="empIdNumber" class="field-input" placeholder="National ID / Passport">
+            </div>
+            <div class="field">
+                <label class="field-label">Employee Code</label>
+                <input type="text" id="empCode" class="field-input" placeholder="Auto-generated if blank">
+            </div>
+        </div>
+
+        <div class="form-card">
+            <div class="form-card-title">Contact</div>
+            <div class="field">
+                <label class="field-label">Phone</label>
+                <input type="tel" id="empPhone" class="field-input" placeholder="07XX XXX XXX">
+            </div>
+            <div class="field">
+                <label class="field-label">Email</label>
+                <input type="email" id="empEmail" class="field-input" placeholder="name@company.com">
+            </div>
+        </div>
+
+        <div class="form-card">
+            <div class="form-card-title">Work Info</div>
+            <div class="field">
+                <label class="field-label">Department</label>
+                <input type="text" id="empDepartment" class="field-input" placeholder="e.g. Production">
+            </div>
+            <div class="field">
+                <label class="field-label">Position</label>
+                <input type="text" id="empPosition" class="field-input" placeholder="e.g. Machine Operator">
+            </div>
+            <div class="field">
+                <label class="field-label">Shift</label>
+                <input type="text" id="empShift" class="field-input" placeholder="Day / Night / Rotating">
+            </div>
+            <div class="field">
+                <label class="field-label">Status</label>
+                <select id="empStatus" class="field-input">
+                    <option value="active" selected>Active</option>
+                    <option value="inactive">Inactive</option>
+                    <option value="suspended">Suspended</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="form-card">
+            <div class="form-card-title">Notes</div>
+            <div class="field">
+                <textarea id="empNotes" class="field-input" rows="3" placeholder="Optional remarks"></textarea>
+            </div>
+        </div>
+
+    </form>
+
+</div>
+
+<div class="form-actions">
+    <button class="action-btn green" onclick="RBAlcohol.submitEmployee()">💾 Save</button>
+</div>
+
+<div id="loadingOverlay" class="loading-overlay">
+    <div class="loading-spinner"></div>
+    <div class="loading-text" id="loadingText">Loading...</div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/offline.js"></script>
+<script src="js/app.js"></script>
+<script src="js/alcohol.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        RBAlcohol.initEmployeeAdd();
+    });
+</script>
+
+</body>
+</html>
