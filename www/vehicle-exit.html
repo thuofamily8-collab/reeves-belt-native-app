@@ -1,212 +1,112 @@
-/**
- * ============================================================
- * VEHICLE EXIT LOGIC
- * Lists vehicles currently inside; processes exits.
- * Shows pre-weighed code badge when applicable.
- * ============================================================
- */
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#0a192f">
+    <title>Vehicle Exit - Reeves Belt App</title>
+    <link rel="stylesheet" href="css/app.css">
+    <link rel="stylesheet" href="css/forms.css">
+</head>
+<body class="form-page">
 
-// ============================================================
-// LOAD VEHICLES INSIDE
-// ============================================================
-function loadVehiclesInside() {
-    var container = document.getElementById('vehiclesList');
-    if (!container) return;
+<div class="network-bar" id="networkBar"></div>
 
-    container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🚛</div><p>Loading vehicles...</p></div>';
+<div class="form-container">
 
-    RBApi.getVehiclesInside().then(function (res) {
-        var vehicles = (res && res.vehicles) || (res.data && res.data.vehicles) || [];
-        renderVehicles(vehicles);
-    }).catch(function (err) {
-        container.innerHTML =
-            '<div class="empty-state">' +
-                '<div class="empty-state-icon">📡</div>' +
-                '<p>Cannot load vehicles</p>' +
-                '<p style="font-size:12px; margin-top:10px; color:#6b7280;">' + (err.error || 'Network error') + '</p>' +
-            '</div>';
+    <div class="form-header">
+        <button class="back-btn" onclick="window.location.href='dashboard.html'">←</button>
+        <div class="form-header-title">🚪 Vehicle Exit</div>
+    </div>
+
+    <div class="app-section-title" style="padding-left:5px; margin-bottom:12px;">Vehicles Currently Inside</div>
+
+    <div id="vehiclesList">
+        <div class="empty-state"><p>Loading...</p></div>
+    </div>
+
+</div>
+
+<!-- ============================================================
+     EXIT MODAL
+     Matches the openExitModal() interface in vehicle-exit.js
+     ============================================================ -->
+<div id="exitModal" class="modal-overlay">
+    <div class="modal-content">
+
+        <div class="modal-header">
+            <div class="modal-title">🚪 Process Vehicle Exit</div>
+            <button class="modal-close" onclick="closeExitModal()">✕</button>
+        </div>
+
+        <div class="modal-body">
+
+            <div style="background:#0e0e18; border-radius:12px; padding:16px; margin-bottom:16px;">
+                <div style="font-size:22px; font-weight:900; color:#00c6ff; font-family:'Courier New',monospace; letter-spacing:2px; margin-bottom:8px;" id="modalPlate">—</div>
+                <div style="font-size:13px; color:#ccd6f6; margin-bottom:4px;" id="modalDriver">👤 —</div>
+                <div style="font-size:13px; color:#8892b0;" id="modalPurpose">📋 —</div>
+            </div>
+
+            <div class="field">
+                <label class="field-label">Entry Weight</label>
+                <input type="text" id="modalEntryWeight" class="field-input" readonly style="background:rgba(0,198,255,0.08); border-color:rgba(0,198,255,0.3); color:#00c6ff; font-weight:700;">
+            </div>
+
+            <div class="field">
+                <label class="field-label">Exit Weight (kg) *</label>
+                <input type="number" id="modalExitWeight" class="field-input" placeholder="e.g. 29500" inputmode="numeric" autocomplete="off">
+            </div>
+
+            <div id="weightComparison" class="weight-comparison">
+                <div class="comparison-placeholder">Enter exit weight to compare</div>
+            </div>
+
+            <div class="field">
+                <label class="field-label">Exit Comment</label>
+                <textarea id="modalExitComment" class="field-input" rows="2" placeholder="Optional remarks"></textarea>
+            </div>
+
+            <div class="field">
+                <label class="field-label">Notes (required to flag)</label>
+                <textarea id="modalNotes" class="field-input" rows="2" placeholder="Add notes before flagging"></textarea>
+            </div>
+
+        </div>
+
+        <div class="modal-footer">
+            <button class="action-btn green" onclick="submitExit(false)">✓ Authorize Exit</button>
+            <button class="action-btn red" onclick="submitExit(true)">⚠️ Flag Vehicle</button>
+        </div>
+
+    </div>
+</div>
+
+<!-- ============================================================
+     LOADING OVERLAY
+     ============================================================ -->
+<div id="loadingOverlay" class="loading-overlay">
+    <div class="loading-spinner"></div>
+    <div class="loading-text" id="loadingText">Processing...</div>
+</div>
+
+<!-- ============================================================
+     SCRIPTS — ORDER MATTERS
+     ============================================================ -->
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/offline.js"></script>
+<script src="js/app.js"></script>
+<script src="js/permissions.js"></script>
+<script src="js/shift-common.js"></script>
+<script src="js/vehicle-exit.js"></script>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        if (typeof RBShift !== 'undefined') {
+            RBShift.injectBanner();
+        }
     });
-}
+</script>
 
-// ============================================================
-// RENDER VEHICLES
-// ============================================================
-function renderVehicles(vehicles) {
-    var container = document.getElementById('vehiclesList');
-    if (!container) return;
-
-    if (!vehicles || vehicles.length === 0) {
-        container.innerHTML =
-            '<div class="empty-state">' +
-                '<div class="empty-state-icon">🚛</div>' +
-                '<p>No vehicles currently inside</p>' +
-            '</div>';
-        return;
-    }
-
-    var html = '';
-    for (var i = 0; i < vehicles.length; i++) {
-        var v = vehicles[i];
-        var entryTime = v.entry_time ? formatTime(v.entry_time) : 'Just now';
-
-        // Pre-weighed badge (only if this vehicle came from a pre-weighed truck)
-        var preweighedBadge = v.preweighed_code
-            ? '<div style="display:inline-block; margin-top:8px; padding:3px 8px; background:rgba(212,175,55,0.15); border:1px solid rgba(212,175,55,0.4); border-radius:6px; font-size:10px; color:#f0d060; font-weight:700; letter-spacing:1px;">📥 PRE-WEIGHED · ' + escapeHtml(v.preweighed_code) + '</div>'
-            : '';
-
-        html +=
-            '<div class="vehicle-info-card" onclick="startExit(' + v.id + ', &quot;' + escapeHtml(v.plate_number) + '&quot;)">' +
-                '<div class="vehicle-info-plate">' + escapeHtml(v.plate_number) + '</div>' +
-                '<div class="vehicle-info-detail">🚚 ' + escapeHtml(v.vehicle_type || '—') + (v.vehicle_model ? ' · ' + escapeHtml(v.vehicle_model) : '') + '</div>' +
-                '<div class="vehicle-info-detail">👤 ' + escapeHtml(v.driver_name || '—') + '</div>' +
-                '<div class="vehicle-info-detail">📞 ' + escapeHtml(v.driver_phone || '—') + '</div>' +
-                '<div class="vehicle-info-detail">🕐 In: ' + entryTime + '</div>' +
-                (v.entry_weight_kg ? '<div class="vehicle-info-weight">⚖️ Entry: ' + v.entry_weight_kg + ' kg</div>' : '') +
-                preweighedBadge +
-            '</div>';
-    }
-    container.innerHTML = html;
-}
-
-// ============================================================
-// START EXIT PROCESS
-// ============================================================
-var _exitVehicleId = null;
-
-function startExit(logId, plate) {
-    _exitVehicleId = logId;
-
-    var modal = document.getElementById('exitModal');
-    if (!modal) {
-        // Fallback: use prompt
-        var w = prompt('Enter exit weight for ' + plate + ' (kg):');
-        if (w === null) return;
-        var c = prompt('Exit comment (optional):') || '';
-        submitExit(logId, parseFloat(w), c);
-        return;
-    }
-
-    // Show modal
-    var titleEl = document.getElementById('exitModalTitle');
-    if (titleEl) titleEl.textContent = 'Exit · ' + plate;
-
-    var weightInput = document.getElementById('exitWeight');
-    if (weightInput) weightInput.value = '';
-
-    var commentInput = document.getElementById('exitComment');
-    if (commentInput) commentInput.value = '';
-
-    modal.classList.add('show');
-}
-
-function cancelExit() {
-    var modal = document.getElementById('exitModal');
-    if (modal) modal.classList.remove('show');
-    _exitVehicleId = null;
-}
-
-function confirmExit() {
-    if (!_exitVehicleId) return;
-
-    var weightInput = document.getElementById('exitWeight');
-    var commentInput = document.getElementById('exitComment');
-
-    var exitWeight = weightInput ? parseFloat(weightInput.value) : null;
-    var exitComment = commentInput ? (commentInput.value || '').trim() : '';
-
-    if (!exitWeight || exitWeight <= 0) {
-        if (typeof RBApp !== 'undefined' && RBApp.showToast) {
-            RBApp.showToast('Enter a valid exit weight', 'error');
-        } else {
-            alert('Enter a valid exit weight');
-        }
-        return;
-    }
-
-    submitExit(_exitVehicleId, exitWeight, exitComment);
-}
-
-function submitExit(logId, exitWeight, exitComment) {
-    var btn = document.getElementById('exitConfirmBtn');
-    if (btn) { btn.disabled = true; btn.textContent = 'Processing...'; }
-
-    RBApi.processVehicleExit(logId, exitWeight, exitComment).then(function (res) {
-        if (navigator.vibrate) navigator.vibrate(150);
-
-        var data = res || {};
-        var netW = data.net_weight_kg !== undefined
-            ? data.net_weight_kg
-            : (data.data && data.data.net_weight_kg);
-
-        var msg = '✅ Exit recorded';
-        if (netW !== null && netW !== undefined) {
-            msg += ' · Net ' + netW + ' kg';
-        }
-
-        if (typeof RBApp !== 'undefined' && RBApp.showToast) {
-            RBApp.showToast(msg, 'success');
-        } else {
-            alert(msg);
-        }
-
-        cancelExit();
-        _exitVehicleId = null;
-
-        if (btn) { btn.disabled = false; btn.textContent = 'Confirm Exit'; }
-
-        // Refresh the list
-        setTimeout(function () {
-            loadVehiclesInside();
-        }, 500);
-
-    }).catch(function (err) {
-        var msg = err && (err.error || err.message) ? (err.error || err.message) : 'network error';
-
-        if (typeof RBApp !== 'undefined' && RBApp.showToast) {
-            RBApp.showToast('Failed: ' + msg, 'error');
-        } else {
-            alert('Failed: ' + msg);
-        }
-
-        if (btn) { btn.disabled = false; btn.textContent = 'Confirm Exit'; }
-    });
-}
-
-// ============================================================
-// HELPERS
-// ============================================================
-function formatTime(dateStr) {
-    try {
-        var d = new Date(dateStr.replace(' ', 'T'));
-        if (isNaN(d.getTime())) return dateStr;
-        var now = new Date();
-        var diff = Math.floor((now - d) / 1000);
-        if (diff < 60) return 'Just now';
-        if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
-        if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
-        return d.getHours().toString().padStart(2, '0') + ':' +
-               d.getMinutes().toString().padStart(2, '0');
-    } catch (e) {
-        return dateStr;
-    }
-}
-
-function escapeHtml(text) {
-    if (!text) return '';
-    var div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-// ============================================================
-// INIT
-// ============================================================
-document.addEventListener('DOMContentLoaded', function () {
-    if (!RBAuth.requireLogin()) return;
-    loadVehiclesInside();
-
-    // Refresh every 30s
-    setInterval(function () {
-        if (!document.hidden) loadVehiclesInside();
-    }, 30000);
-});
+</body>
+</html>
