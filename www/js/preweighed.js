@@ -2,6 +2,8 @@
  * ============================================================
  * REEVES BELT APP - PRE-WEIGHED TRUCKS UI
  * ============================================================
+ * Supports both sampled and non-sampled trucks.
+ * Handles flat and nested response shapes.
  */
 
 var RBPreweighed = (function () {
@@ -69,6 +71,9 @@ var RBPreweighed = (function () {
             var t = trucks[i];
             var statusColor = statusToColor(t.status);
             var statusLabel = statusToLabel(t.status);
+            var samplingBadge = t.requires_sampling
+                ? '<div style="display:inline-block; margin-top:8px; padding:3px 8px; background:rgba(245,158,11,0.2); border:1px solid #f59e0b; border-radius:6px; font-size:10px; color:#f59e0b; font-weight:700; letter-spacing:1px;">🧪 SAMPLE REQUIRED</div>'
+                : '<div style="display:inline-block; margin-top:8px; padding:3px 8px; background:rgba(16,185,129,0.2); border:1px solid #10b981; border-radius:6px; font-size:10px; color:#10b981; font-weight:700; letter-spacing:1px;">⚡ DIRECT CALL-IN</div>';
 
             html +=
                 '<div class="vehicle-info-card" onclick="RBPreweighed.openDetail(' + t.id + ')" style="cursor:pointer;">' +
@@ -85,6 +90,7 @@ var RBPreweighed = (function () {
                     '<div class="vehicle-info-detail" style="margin-top:10px;">👤 ' + escapeHtml(t.driver_name || '—') + '</div>' +
                     '<div class="vehicle-info-detail">📦 ' + escapeHtml(t.product_type || '—') + '</div>' +
                     '<div class="vehicle-info-detail">🕐 ' + escapeHtml(formatTime(t.arrival_at || t.created_at)) + '</div>' +
+                    samplingBadge +
                 '</div>';
         }
         container.innerHTML = html;
@@ -125,12 +131,15 @@ var RBPreweighed = (function () {
         var plate = (document.getElementById('pwPlate').value || '').trim().toUpperCase();
         if (!plate) { showToast('Enter vehicle plate', 'error'); return; }
 
+        var samplingEl = document.getElementById('pwRequiresSampling');
+
         var payload = {
             vehicle_plate:       plate,
             driver_name:         (document.getElementById('pwDriverName').value || '').trim() || null,
             driver_phone:        (document.getElementById('pwDriverPhone').value || '').trim() || null,
             transporter_company: (document.getElementById('pwCompany').value || '').trim() || null,
             product_type:        document.getElementById('pwProduct').value || null,
+            requires_sampling:   samplingEl ? !!samplingEl.checked : true,
             declared_weight_kg:  parseFloat(document.getElementById('pwWeight').value) || null,
             notes:               (document.getElementById('pwNotes').value || '').trim() || null
         };
@@ -208,12 +217,33 @@ var RBPreweighed = (function () {
         var statusEl = document.getElementById('pwDetailStatus');
         if (statusEl) statusEl.style.background = statusToColor(t.status);
 
+        // Sampling status display
+        var samplingEl = document.getElementById('pwDetailSampling');
+        if (samplingEl) {
+            if (t.requires_sampling) {
+                samplingEl.textContent = '✓ Yes — sample required';
+                samplingEl.style.color = '#f59e0b';
+            } else {
+                samplingEl.textContent = '✗ No — call in directly';
+                samplingEl.style.color = '#10b981';
+            }
+        }
+
+        // Sample button gating
         var sampleBtn = document.getElementById('pwSampleBtn');
         if (sampleBtn) {
-            if (t.status !== 'parked') {
+            if (!t.requires_sampling) {
+                sampleBtn.style.display = 'none';
+            } else if (t.status !== 'parked') {
+                sampleBtn.style.display = 'block';
                 sampleBtn.disabled = true;
                 sampleBtn.style.opacity = '0.5';
                 sampleBtn.textContent = '✓ Sample already taken';
+            } else {
+                sampleBtn.style.display = 'block';
+                sampleBtn.disabled = false;
+                sampleBtn.style.opacity = '1';
+                sampleBtn.textContent = '🧪 Take Sample';
             }
         }
 
@@ -260,6 +290,10 @@ var RBPreweighed = (function () {
                 '</div>';
         }
 
+        var samplingNote = !t.requires_sampling
+            ? '<div style="margin-top:10px; padding:8px 12px; background:rgba(16,185,129,0.15); border-left:3px solid #10b981; border-radius:6px; font-size:11px; color:#a7f3d0;">⚡ This truck does not require sampling — call in directly.</div>'
+            : '';
+
         box.innerHTML =
             '<div style="background:#0a192f; border:2px solid #10b981; border-radius:12px; padding:16px; margin-top:14px;">' +
                 '<div style="font-size:11px; color:#10b981; letter-spacing:2px; font-weight:800; margin-bottom:10px;">✓ TRUCK FOUND</div>' +
@@ -269,6 +303,7 @@ var RBPreweighed = (function () {
                 '<div style="font-size:13px; color:#ccd6f6; margin-bottom:4px;">📦 ' + escapeHtml(t.product_type || '—') + '</div>' +
                 '<div style="font-size:13px; color:#ccd6f6; margin-bottom:4px;">🏢 ' + escapeHtml(t.transporter_company || '—') + '</div>' +
                 sampleHtml +
+                samplingNote +
                 '<button onclick="RBPreweighed.callIn(' + t.id + ')" style="width:100%; margin-top:16px; padding:14px; background:linear-gradient(135deg,#10b981,#059669); color:#fff; border:none; border-radius:10px; font-size:14px; font-weight:800; letter-spacing:1px; cursor:pointer; text-transform:uppercase; box-shadow:0 4px 0 #047857;">🚪 Call In Truck</button>' +
             '</div>';
         box.style.display = 'block';
@@ -284,7 +319,15 @@ var RBPreweighed = (function () {
             hideLoading();
             if (navigator.vibrate) navigator.vibrate(150);
             var pendingId = res.pending_entry_id || (res.data && res.data.pending_entry_id);
-            showToast('✅ Truck called in — awaiting capture', 'success');
+            var requiresSampling = res.requires_sampling !== undefined
+                ? res.requires_sampling
+                : (res.data && res.data.requires_sampling);
+
+            if (requiresSampling === false) {
+                showToast('⚡ Non-sampled truck called in', 'success');
+            } else {
+                showToast('✅ Truck called in — awaiting capture', 'success');
+            }
 
             if (pendingId) {
                 setTimeout(function () {
