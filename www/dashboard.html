@@ -48,19 +48,6 @@
             letter-spacing: 2px; font-weight: 700;
             text-transform: uppercase;
         }
-
-        .action-tile.soon {
-            position: relative; opacity: 0.65;
-            filter: saturate(0.7);
-        }
-        .action-tile.soon::after {
-            content: 'SOON';
-            position: absolute; top: 8px; right: 8px;
-            background: rgba(255, 255, 255, 0.9);
-            color: #0a0e1a; font-size: 9px;
-            font-weight: 800; letter-spacing: 1px;
-            padding: 3px 6px; border-radius: 4px;
-        }
     </style>
 </head>
 <body class="dashboard-page">
@@ -118,6 +105,7 @@
         <div class="app-section-title">Quick Actions</div>
         <div class="action-grid" style="grid-template-columns: 1fr 1fr;">
 
+            <!-- ⭐ PROMINENT: PRE-WEIGHED TRUCKS -->
             <a href="preweighed-list.html" class="tile-prominent">
                 <div class="icon">🚛</div>
                 <div class="info">
@@ -127,6 +115,7 @@
                 <div class="arrow">›</div>
             </a>
 
+            <!-- STANDARD 2x2 GRID -->
             <a href="vehicle-entry.html" class="action-tile entry">
                 <div class="action-icon">🚛</div>
                 <div class="action-title">Vehicle Entry</div>
@@ -159,18 +148,19 @@
             <div class="line"></div>
         </div>
 
+        <!-- ACTIVE MODULES -->
         <div class="action-grid" style="grid-template-columns: 1fr 1fr;">
 
-            <a href="alcohol-test.html" class="action-tile soon" style="background: linear-gradient(135deg, #7c3aed, #6d28d9); border-color: #7c3aed;">
+            <a href="alcohol-list.html" class="action-tile" style="background: linear-gradient(135deg, #7c3aed, #6d28d9); border-color: #7c3aed;">
                 <div class="action-icon">🍷</div>
                 <div class="action-title">AlcoBlow Test</div>
                 <div class="action-sub">Breathalyzer log</div>
             </a>
 
-            <a href="employee-clock.html" class="action-tile soon" style="background: linear-gradient(135deg, #0891b2, #0e7490); border-color: #0891b2;">
-                <div class="action-icon">🕐</div>
-                <div class="action-title">Employee Clock</div>
-                <div class="action-sub">Access control</div>
+            <a href="employees-list.html" class="action-tile" style="background: linear-gradient(135deg, #0891b2, #0e7490); border-color: #0891b2;">
+                <div class="action-icon">👥</div>
+                <div class="action-title">Employees</div>
+                <div class="action-sub">Employee registry</div>
             </a>
 
         </div>
