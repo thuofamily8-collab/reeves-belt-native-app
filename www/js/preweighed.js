@@ -2,6 +2,7 @@
  * ============================================================
  * REEVES BELT APP - PRE-WEIGHED TRUCKS UI
  * ============================================================
+ * Handles both flat and nested response shapes from the server.
  */
 
 var RBPreweighed = (function () {
@@ -15,8 +16,6 @@ var RBPreweighed = (function () {
         var user = RBAuth.getCurrentUser();
         var isSuper = user && user.is_super_admin;
         var role = user ? user.role : '';
-
-        // Everyone with a role can add; only guards/supervisors/admin
         var canAdd = ['guard', 'supervisor'].indexOf(role) !== -1 || isSuper;
 
         var addBtn = document.getElementById('pwAddBtn');
@@ -24,7 +23,6 @@ var RBPreweighed = (function () {
 
         loadList();
 
-        // Refresh every 30s while online
         setInterval(function () {
             if (!document.hidden && typeof RBOffline !== 'undefined' && RBOffline.isOnline()) {
                 loadList(true);
@@ -34,7 +32,6 @@ var RBPreweighed = (function () {
 
     function loadList(silent) {
         if (!silent) showLoading('Loading trucks...');
-        else hideLoading();
 
         var params = {};
 
@@ -49,8 +46,7 @@ var RBPreweighed = (function () {
 
         RBApi.preweighedList(params).then(function (res) {
             hideLoading();
-            var payload = (res.data && res.data.data) ? res.data.data : res.data;
-            var trucks = (payload && payload.trucks) || [];
+            var trucks = (res && res.trucks) || (res.data && res.data.trucks) || [];
             renderList(trucks);
         }).catch(function (err) {
             hideLoading();
@@ -127,7 +123,6 @@ var RBPreweighed = (function () {
     // ----------------------------------------------------------
     function initAddPage() {
         if (!RBAuth.requireLogin()) return;
-        // Nothing special to init; the form handles submission
     }
 
     function submitAdd() {
@@ -148,15 +143,19 @@ var RBPreweighed = (function () {
 
         RBApi.preweighedCreate(payload).then(function (res) {
             hideLoading();
-            var data = (res.data && res.data.data) ? res.data.data : res.data;
+            var code = res.unique_code
+                    || (res.data && res.data.unique_code)
+                    || '—';
             if (navigator.vibrate) navigator.vibrate(150);
-            showToast('✅ Recorded. Code: ' + data.unique_code, 'success');
+            showToast('✅ Recorded. Code: ' + code, 'success');
             setTimeout(function () {
                 window.location.href = 'preweighed-list.html';
-            }, 1000);
+            }, 1200);
         }).catch(function (err) {
             hideLoading();
-            showToast('Failed: ' + (err.error || 'network error'), 'error');
+            console.error('[preweighed] create failed:', err);
+            var msg = err && (err.error || err.message) ? (err.error || err.message) : 'network error';
+            showToast('Failed: ' + msg, 'error');
         });
     }
 
@@ -184,8 +183,7 @@ var RBPreweighed = (function () {
         showLoading('Loading truck...');
         RBApi.preweighedList({ date: 'all', limit: 500 }).then(function (res) {
             hideLoading();
-            var payload = (res.data && res.data.data) ? res.data.data : res.data;
-            var trucks = (payload && payload.trucks) || [];
+            var trucks = (res && res.trucks) || (res.data && res.data.trucks) || [];
             var truck = null;
             for (var i = 0; i < trucks.length; i++) {
                 if (trucks[i].id === truckId) { truck = trucks[i]; break; }
@@ -214,7 +212,11 @@ var RBPreweighed = (function () {
         setText('pwDetailArrival', formatTime(t.arrival_at || t.created_at));
         setText('pwDetailNotes', t.notes || '—');
 
-        // Disable sample button if already sampled
+        var statusEl = document.getElementById('pwDetailStatus');
+        if (statusEl) {
+            statusEl.style.background = statusToColor(t.status);
+        }
+
         var sampleBtn = document.getElementById('pwSampleBtn');
         if (sampleBtn) {
             if (t.status !== 'parked') {
@@ -224,7 +226,6 @@ var RBPreweighed = (function () {
             }
         }
 
-        // Store for reveal
         window._pwCurrentTruck = t;
     }
 
@@ -240,12 +241,13 @@ var RBPreweighed = (function () {
         showLoading('Looking up...');
         RBApi.preweighedReveal(code).then(function (res) {
             hideLoading();
-            var data = (res.data && res.data.data) ? res.data.data : res.data;
-            if (!data || !data.truck) {
+            var truck = res.truck || (res.data && res.data.truck) || null;
+            var sample = res.sample || (res.data && res.data.sample) || null;
+            if (!truck) {
                 showToast('Code not found', 'error');
                 return;
             }
-            renderReveal(data);
+            renderReveal({ truck: truck, sample: sample });
         }).catch(function (err) {
             hideLoading();
             showToast('Not found: ' + (err.error || 'invalid code'), 'error');
@@ -313,12 +315,10 @@ var RBPreweighed = (function () {
         }
         _currentTruckId = truckId;
 
-        // Load truck details for context
         showLoading('Loading...');
         RBApi.preweighedList({ date: 'all', limit: 500 }).then(function (res) {
             hideLoading();
-            var payload = (res.data && res.data.data) ? res.data.data : res.data;
-            var trucks = (payload && payload.trucks) || [];
+            var trucks = (res && res.trucks) || (res.data && res.data.trucks) || [];
             var truck = null;
             for (var i = 0; i < trucks.length; i++) {
                 if (trucks[i].id === truckId) { truck = trucks[i]; break; }
@@ -357,12 +357,22 @@ var RBPreweighed = (function () {
             notes: notes || null
         }).then(function (res) {
             hideLoading();
-            var data = (res.data && res.data.data) ? res.data.data : res.data;
+            // Server returns flat shape
+            var labelData = res.label_data
+                         || (res.data && res.data.label_data)
+                         || {
+                             code: res.unique_code || '',
+                             sample_taken_at: res.sample_taken_at || '',
+                             witness1_name: w1Name,
+                             witness2_name: w2Name
+                         };
             if (navigator.vibrate) navigator.vibrate(150);
-            showLabel(data);
+            showLabel({ label_data: labelData });
         }).catch(function (err) {
             hideLoading();
-            showToast('Failed: ' + (err.error || 'network error'), 'error');
+            console.error('[preweighed] sample failed:', err);
+            var msg = err && (err.error || err.message) ? (err.error || err.message) : 'network error';
+            showToast('Failed: ' + msg, 'error');
         });
     }
 
@@ -370,7 +380,6 @@ var RBPreweighed = (function () {
         var overlay = document.getElementById('pwLabelOverlay');
         var label   = document.getElementById('pwLabelContent');
         if (!overlay || !label) {
-            // No overlay — go straight to list
             showToast('✅ Sample recorded', 'success');
             setTimeout(function () {
                 window.location.href = 'preweighed-list.html';
@@ -392,7 +401,7 @@ var RBPreweighed = (function () {
 
         overlay.style.display = 'flex';
 
-        // Attempt to print to configured BT POS printer
+        // Attempt print to configured BT POS printer
         if (typeof RBPrinters !== 'undefined' && typeof RBLabels !== 'undefined') {
             try {
                 var bytes = RBLabels.sampleLabel({
@@ -480,9 +489,6 @@ var RBPreweighed = (function () {
         }
     }
 
-    // ----------------------------------------------------------
-    // PUBLIC API
-    // ----------------------------------------------------------
     return {
         initListPage:   initListPage,
         initAddPage:    initAddPage,
