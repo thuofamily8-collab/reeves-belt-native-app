@@ -114,8 +114,16 @@ var RBApi = (function() {
                 if (xhr.status >= 200 && xhr.status < 300 && response.success) {
                     resolve(response);
                 } else if (xhr.status === 401) {
-                    clearToken();
-                    reject({ success: false, error: 'Session expired', code: 'unauthorized', httpStatus: 401 });
+                    // Preserve the server's actual error message on 401.
+                    // Login failures return 401 but should NOT be reported as "Session expired".
+                    var errMsg  = (response && response.error) ? response.error : 'Session expired';
+                    var errCode = (response && response.code)  ? response.code  : 'unauthorized';
+
+                    // Only wipe the stored token if we actually sent one.
+                    // A failed login attempt shouldn't kill the current session.
+                    if (token) clearToken();
+
+                    reject({ success: false, error: errMsg, code: errCode, httpStatus: 401 });
                 } else {
                     if (response && !response.httpStatus) response.httpStatus = xhr.status;
                     reject(response);
