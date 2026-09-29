@@ -10,7 +10,7 @@ var RBApi = (function() {
     var DEBUG = true;
 
     // ============================================================
-    // STORAGE
+    // STORAGE (Capacitor Preferences when available, else localStorage)
     // ============================================================
     function storageGet(key) {
         return new Promise(function(resolve) {
@@ -51,16 +51,23 @@ var RBApi = (function() {
     }
 
     // ============================================================
-    // TOKEN
+    // TOKEN — reads from vault's active profile
     // ============================================================
-    function getToken() { return localStorage.getItem('rb_token') || ''; }
-    function setToken(token) {
-        localStorage.setItem('rb_token', token);
-        storageSet('rb_token', token);
+    function getToken() {
+        var profile = (typeof RBVault !== 'undefined') ? RBVault.getActiveProfile() : null;
+        return (profile && profile.token) ? profile.token : '';
     }
+
+    function setToken(token) {
+        var id = (typeof RBVault !== 'undefined') ? RBVault.getActiveId() : null;
+        if (id) {
+            RBVault.updateProfile(id, { token: token });
+        }
+    }
+
     function clearToken() {
-        localStorage.removeItem('rb_token');
-        storageRemove('rb_token');
+        var id = (typeof RBVault !== 'undefined') ? RBVault.getActiveId() : null;
+        if (id) RBVault.removeProfile(id);
     }
 
     function log() {
@@ -73,7 +80,7 @@ var RBApi = (function() {
     // ============================================================
     // CORE REQUEST
     // ============================================================
-    function request(endpoint, method, data) {
+    function request(endpoint, method, data, overrideToken) {
         method = method || 'GET';
 
         return new Promise(function(resolve, reject) {
@@ -83,7 +90,7 @@ var RBApi = (function() {
             xhr.setRequestHeader('Content-Type', 'application/json');
             xhr.setRequestHeader('Accept', 'application/json');
 
-            var token = getToken();
+            var token = overrideToken || getToken();
             if (token) {
                 xhr.setRequestHeader('Authorization', 'Bearer ' + token);
                 xhr.setRequestHeader('X-Auth-Token', token);
@@ -114,15 +121,13 @@ var RBApi = (function() {
                 if (xhr.status >= 200 && xhr.status < 300 && response.success) {
                     resolve(response);
                 } else if (xhr.status === 401) {
-                    // Preserve the server's actual error message on 401.
-                    // Login failures return 401 but should NOT be reported as "Session expired".
                     var errMsg  = (response && response.error) ? response.error : 'Session expired';
                     var errCode = (response && response.code)  ? response.code  : 'unauthorized';
-
-                    // Only wipe the stored token if we actually sent one.
-                    // A failed login attempt shouldn't kill the current session.
-                    if (token) clearToken();
-
+                    // Only wipe stored token if we actually sent one AND
+                    // this wasn't a login attempt (login failures must
+                    // not kill the current active profile).
+                    var isLogin = endpoint.indexOf('/auth/login.php') !== -1;
+                    if (token && !isLogin) clearToken();
                     reject({ success: false, error: errMsg, code: errCode, httpStatus: 401 });
                 } else {
                     if (response && !response.httpStatus) response.httpStatus = xhr.status;
@@ -198,7 +203,7 @@ var RBApi = (function() {
             return request(endpoint, 'GET');
         },
 
-        // ===== SHIFT HANDOVER + DEVICE HOLDER (Sprint 3) =====
+        // ===== SHIFT HANDOVER + DEVICE HOLDER =====
         getPosts: function(includeInactive) {
             var endpoint = '/staff/posts-list.php';
             if (includeInactive) endpoint += '?include_inactive=1';
@@ -231,7 +236,36 @@ var RBApi = (function() {
             return request('/staff/shift-changeover.php', 'GET');
         },
 
-        // ===== POSTS ADMIN (Batch C) =====
+        // ===== HOLDER MANAGEMENT (Sprint 4) =====
+        holderTake: function(targetUserId, deviceInfo) {
+            return request('/staff/holder-take.php', 'POST', {
+                target_user_id: targetUserId,
+                device_info: deviceInfo || (navigator.userAgent || '').substring(0, 200)
+            });
+        },
+        holderRelease: function() {
+            return request('/staff/holder-release.php', 'POST', {});
+        },
+        holderStatus: function() {
+            return request('/staff/holder-status.php', 'GET');
+        },
+
+        // ===== ACT-AS-USER CLOCK (holder clocks another guard) =====
+        shiftClockInAs: function(actingUserId, postCode) {
+            return request('/staff/shift-clock-in.php', 'POST', {
+                post_code: postCode,
+                acting_as_user_id: actingUserId
+            });
+        },
+        shiftClockOutAs: function(actingUserId, sessionId, reason) {
+            return request('/staff/shift-clock-out.php', 'POST', {
+                session_id: sessionId || null,
+                acting_as_user_id: actingUserId,
+                reason: reason || 'holder_action'
+            });
+        },
+
+        // ===== POSTS ADMIN =====
         postCreate: function(data) { return request('/staff/post-create.php', 'POST', data); },
         postUpdate: function(data) { return request('/staff/post-update.php', 'POST', data); },
         postDelete: function(postId) { return request('/staff/post-delete.php', 'POST', { post_id: postId }); },
