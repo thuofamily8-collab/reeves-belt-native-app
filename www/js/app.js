@@ -33,7 +33,10 @@ var RBApp = (function() {
             'visitor-checkin.html':   'dashboard.html',
             'patrol-scan.html':       'dashboard.html',
             'guard-shift.html':       'dashboard.html',
-            'supervisor-shift.html':  'supervisor.html'
+            'supervisor-shift.html':  'supervisor.html',
+
+            // Shift management (Sprint 3)
+            'shift-handover.html':    'dashboard.html'
         };
 
         Capacitor.Plugins.App.addListener('backButton', function () {
