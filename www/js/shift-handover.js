@@ -74,7 +74,7 @@ var RBShiftHandover = (function () {
 
         // Refresh every 30s while page is open
         setInterval(function () {
-            if (!document.hidden) loadData();
+            if (!document.hidden) loadData(true);
         }, 30000);
     }
 
@@ -84,7 +84,7 @@ var RBShiftHandover = (function () {
         RBApi.getChangeoverData()
             .then(function (res) {
                 hideLoading();
-                var data = (res && res.data && res.data) ? res.data : res;
+                var data = (res && res.data) ? res.data : res;
                 _posts = data.posts || [];
                 _onDuty = data.on_duty || [];
                 _allStaff = data.all_staff || [];
@@ -93,7 +93,11 @@ var RBShiftHandover = (function () {
             })
             .catch(function (err) {
                 hideLoading();
-                showToast('Failed to load: ' + (err.error || 'network error'), 'error');
+                if (err && err.code === 'unauthorized') {
+                    showToast('Session expired — please log out and log back in', 'error');
+                } else {
+                    showToast('Failed to load: ' + ((err && err.error) || 'network error'), 'error');
+                }
             });
     }
 
@@ -211,30 +215,36 @@ var RBShiftHandover = (function () {
     // ----------------------------------------------------------
     // PIN MODAL
     // ----------------------------------------------------------
-    function openPinModal(actionType, targetUserId, targetName, sessionId) {
-        _pendingAction = {
-            type: actionType,
-            userId: targetUserId,
-            name: targetName,
-            sessionId: sessionId
-        };
-
+    function openPinModalWithExistingActionCustom(title) {
         var titleEl = document.getElementById('shPinTitle');
         var targetEl = document.getElementById('shPinTarget');
         var inputEl = document.getElementById('shPinInput');
         var errEl = document.getElementById('shPinError');
 
-        if (titleEl) {
-            if (actionType === 'clock_in') titleEl.textContent = 'Enter PIN to Start Shift';
-            else if (actionType === 'device_take') titleEl.textContent = 'Enter PIN to Take Device';
-            else if (actionType === 'device_release') titleEl.textContent = 'Enter PIN to Release';
-            else titleEl.textContent = 'Enter PIN';
-        }
-        if (targetEl) targetEl.textContent = targetName || '';
-        if (inputEl) { inputEl.value = ''; setTimeout(function () { inputEl.focus(); }, 200); }
-        if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
+        titleEl.textContent = title;
+        targetEl.textContent = _pendingAction.name || '';
+        inputEl.value = '';
+        errEl.textContent = '';
+        errEl.style.display = 'none';
 
         document.getElementById('shPinModal').classList.add('show');
+        setTimeout(function () { inputEl.focus(); }, 200);
+    }
+
+    function openPinModalWithExistingAction() {
+        var titleEl = document.getElementById('shPinTitle');
+        var targetEl = document.getElementById('shPinTarget');
+        var inputEl = document.getElementById('shPinInput');
+        var errEl = document.getElementById('shPinError');
+
+        titleEl.textContent = 'Enter PIN to Start Shift';
+        targetEl.textContent = _pendingAction.name + ' · ' + (_pendingAction.post_code || '');
+        inputEl.value = '';
+        errEl.textContent = '';
+        errEl.style.display = 'none';
+
+        document.getElementById('shPinModal').classList.add('show');
+        setTimeout(function () { inputEl.focus(); }, 200);
     }
 
     function closePinModal() {
@@ -242,16 +252,55 @@ var RBShiftHandover = (function () {
         _pendingAction = null;
     }
 
+    function showPinError(msg) {
+        var errEl = document.getElementById('shPinError');
+        if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; }
+        if (navigator.vibrate) navigator.vibrate([50, 50, 50]);
+    }
+
+    // ----------------------------------------------------------
+    // CONFIRM PIN — main action router
+    // ----------------------------------------------------------
     function confirmPin() {
         if (!_pendingAction) return;
 
         var pin = (document.getElementById('shPinInput').value || '').trim();
+
+        // ---- SELF-ACTION SHORTCUT ----
+        // If the target is the CURRENT user and it's not a clock-in,
+        // we already have a valid token. Skip re-login entirely.
+        var isSelf = _currentUser && (_pendingAction.userId === _currentUser.id);
+        if (isSelf && _pendingAction.type !== 'clock_in') {
+            closePinModal();
+            showLoading('Working...');
+            performAction(RBApi.getToken(), _pendingAction)
+                .then(function () {
+                    hideLoading();
+                    if (navigator.vibrate) navigator.vibrate(100);
+                    showToast('✅ ' + successMessage(_pendingAction ? _pendingAction.type : ''), 'success');
+                    setTimeout(function () { loadData(true); }, 400);
+                })
+                .catch(function (err) {
+                    hideLoading();
+                    var msg = 'Action failed';
+                    if (err) {
+                        if (err.code === 'unauthorized' || err.httpStatus === 401) {
+                            msg = 'Your session expired. Please log out and log back in.';
+                        } else {
+                            msg = err.error || err.message || msg;
+                        }
+                    }
+                    showToast('❌ ' + msg, 'error');
+                });
+            return;
+        }
+
+        // ---- OTHER-USER ACTION: needs PIN validation ----
         if (!pin) {
             showPinError('Enter your PIN');
             return;
         }
 
-        // We log in as this user with the PIN (password) — verify via auth
         var targetUsername = null;
         for (var i = 0; i < _allStaff.length; i++) {
             if (_allStaff[i].id === _pendingAction.userId) {
@@ -265,38 +314,43 @@ var RBShiftHandover = (function () {
         }
 
         showLoading('Verifying...');
+        var action = _pendingAction; // capture before async
 
-        // Step 1: log in as the target user (this also gets us their token)
         RBApi.login(targetUsername, pin, {})
             .then(function (loginRes) {
-                // Step 2: perform the pending action using their token
-                var newToken = loginRes.token;
-                if (!newToken) throw new Error('No token returned');
-
-                var doAction;
-                if (_pendingAction.type === 'clock_in') {
-                    doAction = RBApi.shiftClockIn.applyPost(_pendingAction.post_code);
+                if (!loginRes || !loginRes.token) {
+                    throw { error: 'Login failed', code: 'no_token', httpStatus: 401 };
                 }
-
-                // Simpler: call the specific endpoint with a custom token
-                return performAction(newToken, _pendingAction);
+                return performAction(loginRes.token, action);
             })
             .then(function () {
                 hideLoading();
                 closePinModal();
                 if (navigator.vibrate) navigator.vibrate(100);
-                showToast('✅ ' + successMessage(_pendingAction.type), 'success');
-                setTimeout(function () { loadData(); }, 500);
+                showToast('✅ ' + successMessage(action.type), 'success');
+                setTimeout(function () { loadData(true); }, 400);
             })
             .catch(function (err) {
                 hideLoading();
-                showPinError(err && (err.error || err.message) ? (err.error || err.message) : 'Invalid PIN');
+                var msg = 'Action failed';
+                if (err) {
+                    if (err.code === 'unauthorized' || err.httpStatus === 401) {
+                        msg = 'Invalid PIN';
+                    } else {
+                        msg = err.error || err.message || msg;
+                    }
+                }
+                showPinError(msg);
             });
     }
 
+    // ----------------------------------------------------------
+    // PERFORM ACTION — raw fetch with custom token
+    // ----------------------------------------------------------
     function performAction(token, action) {
         var headers = {
             'Content-Type': 'application/json',
+            'Accept': 'application/json',
             'Authorization': 'Bearer ' + token,
             'X-Auth-Token': token
         };
@@ -318,13 +372,10 @@ var RBShiftHandover = (function () {
                 reason: 'shift_handover'
             }, headers);
         } else {
-            return Promise.reject(new Error('Unknown action'));
+            return Promise.reject({ error: 'Unknown action', code: 'unknown_action' });
         }
 
-        return promise.then(function (res) {
-            if (!res.success) throw res;
-            return res;
-        });
+        return promise;
     }
 
     function fetchJSON(url, method, body, headers) {
@@ -332,7 +383,34 @@ var RBShiftHandover = (function () {
             method: method,
             headers: headers,
             body: JSON.stringify(body)
-        }).then(function (r) { return r.json(); });
+        }).then(function (r) {
+            return r.json().then(function (data) {
+                if (r.status === 401) {
+                    throw {
+                        success: false,
+                        error: data.error || 'Session expired',
+                        code: data.code || 'unauthorized',
+                        httpStatus: 401
+                    };
+                }
+                if (!r.ok || !data.success) {
+                    throw {
+                        success: false,
+                        error: data.error || ('HTTP ' + r.status),
+                        code: data.code || 'http_error',
+                        httpStatus: r.status
+                    };
+                }
+                return data;
+            }).catch(function (parseErr) {
+                // If JSON parse failed, wrap in structured error
+                if (parseErr && parseErr.code) throw parseErr;
+                throw { success: false, error: 'HTTP ' + r.status + ' — invalid response', code: 'bad_response', httpStatus: r.status };
+            });
+        }).catch(function (netErr) {
+            if (netErr && netErr.code) throw netErr;
+            throw { success: false, error: 'Network error', code: 'network_error' };
+        });
     }
 
     function successMessage(type) {
@@ -343,22 +421,14 @@ var RBShiftHandover = (function () {
         return 'Done';
     }
 
-    function showPinError(msg) {
-        var errEl = document.getElementById('shPinError');
-        if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; }
-        if (navigator.vibrate) navigator.vibrate([50, 50, 50]);
-    }
-
     // ----------------------------------------------------------
     // PUBLIC ACTIONS
     // ----------------------------------------------------------
     function openClockIn(userId) {
-        // Find their full name
         var name = '';
         for (var i = 0; i < _allStaff.length; i++) {
             if (_allStaff[i].id === userId) { name = _allStaff[i].full_name; break; }
         }
-        // Show a post picker first
         showPostPicker(userId, name);
     }
 
@@ -387,22 +457,6 @@ var RBShiftHandover = (function () {
         openPinModalWithExistingAction();
     }
 
-    function openPinModalWithExistingAction() {
-        var titleEl = document.getElementById('shPinTitle');
-        var targetEl = document.getElementById('shPinTarget');
-        var inputEl = document.getElementById('shPinInput');
-        var errEl = document.getElementById('shPinError');
-
-        titleEl.textContent = 'Enter PIN to Start Shift';
-        targetEl.textContent = _pendingAction.name + ' · ' + _pendingAction.post_code;
-        inputEl.value = '';
-        errEl.textContent = '';
-        errEl.style.display = 'none';
-
-        document.getElementById('shPinModal').classList.add('show');
-        setTimeout(function () { inputEl.focus(); }, 200);
-    }
-
     function clockOut(sessionId) {
         if (!confirm('End your shift?')) return;
         if (navigator.vibrate) navigator.vibrate(100);
@@ -412,47 +466,81 @@ var RBShiftHandover = (function () {
             .then(function () {
                 hideLoading();
                 showToast('✅ Shift ended', 'success');
-                setTimeout(function () { loadData(); }, 500);
+                setTimeout(function () { loadData(true); }, 400);
             })
             .catch(function (err) {
                 hideLoading();
-                showToast('Failed: ' + (err.error || 'network error'), 'error');
+                var msg = (err && err.error) ? err.error : 'network error';
+                if (err && err.code === 'unauthorized') msg = 'Session expired — log out and log back in';
+                showToast('Failed: ' + msg, 'error');
             });
     }
 
     function requestDeviceTake() {
+        // SELF action — no PIN needed, uses existing session token
         _pendingAction = {
             type: 'device_take',
             userId: _currentUser.id,
             name: _currentUser.full_name
         };
-        openPinModalWithExistingActionCustom('Enter PIN to Take Device');
+        // Confirm with the user, then act
+        if (!confirm('Take the device now?')) {
+            _pendingAction = null;
+            return;
+        }
+        if (navigator.vibrate) navigator.vibrate(80);
+
+        showLoading('Taking device...');
+        performAction(RBApi.getToken(), _pendingAction)
+            .then(function () {
+                hideLoading();
+                showToast('✅ Device taken', 'success');
+                if (navigator.vibrate) navigator.vibrate(100);
+                setTimeout(function () { loadData(true); }, 400);
+            })
+            .catch(function (err) {
+                hideLoading();
+                var msg = 'Action failed';
+                if (err) {
+                    if (err.code === 'unauthorized' || err.httpStatus === 401) {
+                        msg = 'Your session expired. Please log out and log back in.';
+                    } else {
+                        msg = err.error || err.message || msg;
+                    }
+                }
+                showToast('❌ ' + msg, 'error');
+            });
     }
 
     function requestDeviceRelease() {
         if (!confirm('Release the device? Another guard can pick it up.')) return;
+        if (navigator.vibrate) navigator.vibrate(80);
+
         _pendingAction = {
             type: 'device_release',
             userId: _currentUser.id,
             name: _currentUser.full_name
         };
-        openPinModalWithExistingActionCustom('Enter PIN to Release');
-    }
 
-    function openPinModalWithExistingActionCustom(title) {
-        var titleEl = document.getElementById('shPinTitle');
-        var targetEl = document.getElementById('shPinTarget');
-        var inputEl = document.getElementById('shPinInput');
-        var errEl = document.getElementById('shPinError');
-
-        titleEl.textContent = title;
-        targetEl.textContent = _pendingAction.name;
-        inputEl.value = '';
-        errEl.textContent = '';
-        errEl.style.display = 'none';
-
-        document.getElementById('shPinModal').classList.add('show');
-        setTimeout(function () { inputEl.focus(); }, 200);
+        showLoading('Releasing device...');
+        performAction(RBApi.getToken(), _pendingAction)
+            .then(function () {
+                hideLoading();
+                showToast('✅ Device released', 'success');
+                setTimeout(function () { loadData(true); }, 400);
+            })
+            .catch(function (err) {
+                hideLoading();
+                var msg = 'Action failed';
+                if (err) {
+                    if (err.code === 'unauthorized' || err.httpStatus === 401) {
+                        msg = 'Your session expired. Please log out and log back in.';
+                    } else {
+                        msg = err.error || err.message || msg;
+                    }
+                }
+                showToast('❌ ' + msg, 'error');
+            });
     }
 
     // ----------------------------------------------------------
