@@ -29,6 +29,9 @@
     },
     "Geolocation": {
       "permissions": ["location"]
+    },
+    "BiometricAuth": {
+      "allowDeviceCredential": true
     }
   }
 }
