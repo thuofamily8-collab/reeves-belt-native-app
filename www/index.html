@@ -19,28 +19,34 @@
         <div class="splash-status" id="splashStatus">Starting up...</div>
     </div>
 
+    <script src="js/vault.js"></script>
+    <script src="js/biometric.js"></script>
+    <script src="js/api.js"></script>
     <script src="js/auth.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             var status = document.getElementById('splashStatus');
-            
-            // Wait 1.5 seconds then check auth
+
+            function go(to) {
+                status.textContent = 'Loading...';
+                setTimeout(function() { window.location.href = to; }, 200);
+            }
+
             setTimeout(function() {
                 status.textContent = 'Checking login...';
-                
-                // Check if user is already logged in
-                if (typeof RBAuth !== 'undefined' && RBAuth.isLoggedIn()) {
-                    status.textContent = 'Welcome back!';
-                    setTimeout(function() {
-                        window.location.href = 'dashboard.html';
-                    }, 300);
-                } else {
-                    status.textContent = 'Loading login...';
-                    setTimeout(function() {
-                        window.location.href = 'login.html';
-                    }, 300);
+                try {
+                    var loggedIn = (typeof RBAuth !== 'undefined') && RBAuth.isLoggedIn();
+                    if (loggedIn) {
+                        status.textContent = 'Welcome back!';
+                        go('dashboard.html');
+                    } else {
+                        go('login.html');
+                    }
+                } catch (e) {
+                    console.error('[splash] isLoggedIn error:', e);
+                    go('login.html');
                 }
-            }, 1500);
+            }, 1000);
         });
     </script>
 </body>
