@@ -82,7 +82,6 @@
     color: #fff;
 }
 
-/* Small in-card preview (kept for non-fullscreen fallback) */
 .scanner-frame {
     position: relative;
     width: 100%;
@@ -127,9 +126,6 @@
 }
 .btn-start:active { transform: translateY(2px); box-shadow: 0 2px 0 #b8860b; }
 
-/* ============================================================
-   FULLSCREEN SCANNER OVERLAY
-   ============================================================ */
 #rbScannerOverlay {
     position: fixed;
     inset: 0;
@@ -151,7 +147,6 @@
     z-index: 1;
 }
 
-/* Green aiming frame */
 #rbScannerFrame {
     position: absolute;
     top: 50%;
@@ -171,7 +166,6 @@
     pointer-events: none;
 }
 
-/* Corner accents */
 #rbScannerFrame::before,
 #rbScannerFrame::after {
     content: '';
@@ -191,7 +185,6 @@
     border-bottom-right-radius: 16px;
 }
 
-/* Top overlay bar */
 #rbScannerTop {
     position: absolute;
     top: 0; left: 0; right: 0;
@@ -225,7 +218,6 @@
     font-weight: bold;
 }
 
-/* Bottom hint bar */
 #rbScannerBottom {
     position: absolute;
     bottom: 0; left: 0; right: 0;
@@ -244,7 +236,6 @@
     margin-bottom: 6px;
 }
 
-/* Success flash */
 #rbScannerFlash {
     position: absolute;
     inset: 0;
@@ -446,9 +437,6 @@
     <div id="loadingText">Loading...</div>
 </div>
 
-<!-- ============================================================
-     FULLSCREEN SCANNER OVERLAY
-     ============================================================ -->
 <div id="rbScannerOverlay">
     <video id="rbScannerVideo" playsinline autoplay muted></video>
 
@@ -471,6 +459,8 @@
     </div>
 </div>
 
+<script src="js/vault.js"></script>
+<script src="js/biometric.js"></script>
 <script src="js/api.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/offline.js"></script>
