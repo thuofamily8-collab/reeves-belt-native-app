@@ -1,129 +1,92 @@
 /**
  * ============================================================
- * REEVES BELT SECURE 360 - AUTH HELPERS
+ * REEVES BELT APP - AUTH
  * ============================================================
- * SPRINT 1:
- *   - Offline login using cached credentials
- *   - 14-day offline validity window
- *   - Password hashed with SHA-256 + random salt
- *   - Session snapshot restored on offline login
- * ============================================================
+ * Multi-profile aware. Uses RBVault to store one token per
+ * guard instead of a single shared rb_token.
+ *
+ * Backwards compatible: if RBVault isn't loaded, falls back
+ * to the old single-token behavior.
  */
 
 var RBAuth = (function() {
 
-    // ---------- Config ----------
-    var OFFLINE_DAYS = 14;
-    var OFFLINE_MS   = OFFLINE_DAYS * 24 * 60 * 60 * 1000;
+    var USER_KEY = 'rb_user';
+    var TENANT_KEY = 'rb_tenant_name';
 
-    // ---------- Session keys ----------
-    var K_TOKEN        = 'rb_token';
-    var K_USER         = 'rb_user';
-    var K_TENANT_ID    = 'rb_tenant_id';
-    var K_TENANT_NAME  = 'rb_tenant_name';
-    var K_PERMISSIONS  = 'rb_permissions';
-    var K_EXPIRES_AT   = 'rb_expires_at';
-
-    // ---------- Offline credential keys ----------
-    var K_SALT            = 'rb_cred_salt';
-    var K_HASH            = 'rb_cred_hash';
-    var K_CRED_USER       = 'rb_cred_user';
-    var K_LAST_LOGIN      = 'rb_last_online_login';
-    var K_OFFLINE_SESSION = 'rb_offline_session';
+    function _haveVault() {
+        return typeof RBVault !== 'undefined' && RBVault && RBVault.addProfile;
+    }
 
     // ============================================================
-    // SESSION
+    // LOGIN
     // ============================================================
+    function login(username, password, deviceInfo) {
+        return RBApi.login(username, password, deviceInfo).then(function(res) {
+            // res shape expected: { success, token, user: {...}, tenant_name? }
+            var user = res.user || res.data && res.data.user || null;
+            var token = res.token || res.data && res.data.token || '';
+            var tenantName = res.tenant_name || (res.data && res.data.tenant_name) || '';
 
+            if (user && _haveVault()) {
+                RBVault.addProfile({
+                    user_id: user.id,
+                    username: user.username,
+                    full_name: user.full_name,
+                    role: user.role,
+                    tenant_id: user.tenant_id,
+                    token: token,
+                    token_set_at: Math.floor(Date.now() / 1000)
+                });
+                RBVault.setActiveId(user.id);
+            } else {
+                // Fallback: old single-token path
+                if (token) RBApi.setToken(token);
+                if (user) localStorage.setItem(USER_KEY, JSON.stringify(user));
+            }
+
+            if (tenantName) localStorage.setItem(TENANT_KEY, tenantName);
+            return res;
+        });
+    }
+
+    // ============================================================
+    // LOGOUT (removes just the active profile)
+    // ============================================================
+    function logout() {
+        var active = _haveVault() ? RBVault.getActiveProfile() : null;
+
+        RBApi.logout().catch(function(){});
+
+        if (active && _haveVault()) {
+            RBVault.removeProfile(active.user_id);
+        } else {
+            RBApi.clearToken();
+            localStorage.removeItem(USER_KEY);
+        }
+
+        // If any profiles remain, switch to the next one.
+        if (_haveVault()) {
+            var remaining = RBVault.getAllProfiles();
+            if (remaining.length > 0) {
+                RBVault.setActiveId(remaining[0].user_id);
+                window.location.href = 'dashboard.html';
+                return;
+            }
+        }
+
+        window.location.href = 'login.html';
+    }
+
+    // ============================================================
+    // SESSION STATE
+    // ============================================================
     function isLoggedIn() {
-        return !!localStorage.getItem(K_TOKEN);
-    }
-
-    function getCurrentUser() {
-        var userJson = localStorage.getItem(K_USER);
-        if (!userJson) return null;
-        try {
-            return JSON.parse(userJson);
-        } catch (e) {
-            return null;
+        if (_haveVault()) {
+            var active = RBVault.getActiveProfile();
+            return !!(active && active.token);
         }
-    }
-
-    function getRole() {
-        var u = getCurrentUser();
-        return u && u.role ? u.role : '';
-    }
-
-    function isSupervisor() {
-        return getRole() === 'supervisor';
-    }
-
-    function getDefaultLandingPage() {
-        return isSupervisor() ? 'supervisor.html' : 'dashboard.html';
-    }
-
-    function getTenantName() {
-        return localStorage.getItem(K_TENANT_NAME) || 'No Tenant';
-    }
-
-    function getPermissions() {
-        try {
-            return JSON.parse(localStorage.getItem(K_PERMISSIONS) || '[]');
-        } catch (e) {
-            return [];
-        }
-    }
-
-    function hasPermission(permKey) {
-        return getPermissions().indexOf(permKey) !== -1;
-    }
-
-    function saveSession(data) {
-        localStorage.setItem(K_TOKEN, data.token);
-        localStorage.setItem(K_USER, JSON.stringify(data.user));
-        localStorage.setItem(K_TENANT_ID, data.user.tenant_id || '');
-        localStorage.setItem(K_TENANT_NAME, data.tenant_name || '');
-        localStorage.setItem(K_PERMISSIONS, JSON.stringify(data.permissions || []));
-        localStorage.setItem(K_EXPIRES_AT, data.expires_at || '');
-        localStorage.setItem(K_LAST_LOGIN, String(Date.now()));
-
-        // Snapshot the entire session for offline reuse
-        try {
-            var snapshot = {
-                token:        data.token,
-                user:         data.user,
-                tenant_name:  data.tenant_name || '',
-                permissions:  data.permissions || [],
-                expires_at:   data.expires_at || '',
-                saved_at:     Date.now()
-            };
-            localStorage.setItem(K_OFFLINE_SESSION, JSON.stringify(snapshot));
-        } catch (e) { /* ignore */ }
-
-        if (window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.Preferences) {
-            var P = Capacitor.Plugins.Preferences;
-            P.set({ key: K_TOKEN, value: data.token });
-            P.set({ key: K_USER, value: JSON.stringify(data.user) });
-            P.set({ key: K_TENANT_NAME, value: data.tenant_name || '' });
-            P.set({ key: K_PERMISSIONS, value: JSON.stringify(data.permissions || []) });
-        }
-    }
-
-    function clearSession() {
-        localStorage.removeItem(K_TOKEN);
-        localStorage.removeItem(K_USER);
-        localStorage.removeItem(K_TENANT_ID);
-        localStorage.removeItem(K_TENANT_NAME);
-        localStorage.removeItem(K_PERMISSIONS);
-        localStorage.removeItem(K_EXPIRES_AT);
-
-        if (window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.Preferences) {
-            var P = Capacitor.Plugins.Preferences;
-            P.remove({ key: K_TOKEN });
-            P.remove({ key: K_USER });
-            P.remove({ key: K_TENANT_NAME });
-            P.remove({ key: K_PERMISSIONS });
-        }
+        return !!RBApi.getToken();
     }
 
     function requireLogin() {
@@ -134,170 +97,86 @@ var RBAuth = (function() {
         return true;
     }
 
-    function logout() {
-        RBApi.logout().then(function() {
-        }).catch(function() {
-        }).then(function() {
-            clearSession();
-            window.location.href = 'login.html';
-        });
+    function getToken() {
+        return RBApi.getToken();
+    }
+
+    function getCurrentUser() {
+        if (_haveVault()) {
+            var p = RBVault.getActiveProfile();
+            if (!p) return null;
+            return {
+                id: p.user_id,
+                username: p.username,
+                full_name: p.full_name,
+                role: p.role,
+                tenant_id: p.tenant_id
+            };
+        }
+        try {
+            return JSON.parse(localStorage.getItem(USER_KEY) || 'null');
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function getTenantName() {
+        return localStorage.getItem(TENANT_KEY) || 'Reeves Belt';
+    }
+
+    function isSupervisor() {
+        var u = getCurrentUser();
+        return !!(u && (u.role === 'supervisor' || u.role === 'company_admin' || u.role === 'super_admin'));
     }
 
     // ============================================================
-    // OFFLINE CREDENTIALS (SPRINT 1)
+    // MULTI-PROFILE HELPERS
     // ============================================================
-
-    function randomSalt() {
-        var arr = new Uint8Array(16);
-        if (window.crypto && window.crypto.getRandomValues) {
-            window.crypto.getRandomValues(arr);
-        } else {
-            for (var i = 0; i < arr.length; i++) arr[i] = Math.floor(Math.random() * 256);
-        }
-        var hex = '';
-        for (var j = 0; j < arr.length; j++) {
-            hex += ('0' + arr[j].toString(16)).slice(-2);
-        }
-        return hex;
+    function getAllProfiles() {
+        return _haveVault() ? RBVault.getAllProfiles() : [];
     }
 
-    function sha256Hex(str) {
-        if (window.crypto && window.crypto.subtle && window.TextEncoder) {
-            var enc = new TextEncoder();
-            return window.crypto.subtle.digest('SHA-256', enc.encode(str)).then(function (buf) {
-                var bytes = new Uint8Array(buf);
-                var hex = '';
-                for (var i = 0; i < bytes.length; i++) {
-                    hex += ('0' + bytes[i].toString(16)).slice(-2);
-                }
-                return hex;
-            });
-        }
-        return Promise.resolve('plain:' + str);
+    function switchTo(userId) {
+        if (!_haveVault()) return false;
+        if (!RBVault.getProfile(userId)) return false;
+        RBVault.setActiveId(userId);
+        return true;
     }
 
-    function hashPassword(password, salt) {
-        return sha256Hex(salt + '|' + password);
+    function addProfileFromLogin(loginRes) {
+        // Used when the holder clocks another guard in:
+        // we log in as them, capture their token, then switch back.
+        if (!_haveVault()) return null;
+        var user = loginRes.user || (loginRes.data && loginRes.data.user) || null;
+        var token = loginRes.token || (loginRes.data && loginRes.data.token) || '';
+        if (!user || !token) return null;
+
+        var profile = {
+            user_id: user.id,
+            username: user.username,
+            full_name: user.full_name,
+            role: user.role,
+            tenant_id: user.tenant_id,
+            token: token,
+            token_set_at: Math.floor(Date.now() / 1000)
+        };
+        RBVault.addProfile(profile);
+        return profile;
     }
 
-    function cacheCredentials(username, password) {
-        var salt = randomSalt();
-        return hashPassword(password, salt).then(function (hash) {
-            try {
-                localStorage.setItem(K_SALT, salt);
-                localStorage.setItem(K_HASH, hash);
-                localStorage.setItem(K_CRED_USER, username);
-            } catch (e) { /* ignore */ }
-            return true;
-        });
-    }
-
-    function hasCachedCredentials() {
-        return !!(localStorage.getItem(K_SALT)
-               && localStorage.getItem(K_HASH)
-               && localStorage.getItem(K_OFFLINE_SESSION));
-    }
-
-    function clearCachedCredentials() {
-        localStorage.removeItem(K_SALT);
-        localStorage.removeItem(K_HASH);
-        localStorage.removeItem(K_CRED_USER);
-        localStorage.removeItem(K_OFFLINE_SESSION);
-    }
-
-    /**
-     * Try to log in offline using cached credentials.
-     * On success, restores the last-known session snapshot
-     * so the rest of the app behaves identically to an online login.
-     *
-     * Returns a Promise resolving to { ok, message? }
-     */
-    function loginOffline(username, password) {
-        var storedSalt = localStorage.getItem(K_SALT);
-        var storedHash = localStorage.getItem(K_HASH);
-        var storedUser = localStorage.getItem(K_CRED_USER);
-        var snapshotRaw = localStorage.getItem(K_OFFLINE_SESSION);
-
-        if (!storedSalt || !storedHash || !storedUser) {
-            return Promise.resolve({
-                ok: false,
-                message: 'No offline credentials cached. Please connect and log in once.'
-            });
-        }
-
-        if (!snapshotRaw) {
-            return Promise.resolve({
-                ok: false,
-                message: 'No offline session available. Connect and log in once.'
-            });
-        }
-
-        var lastLogin = parseInt(localStorage.getItem(K_LAST_LOGIN) || '0', 10);
-        if (lastLogin && (Date.now() - lastLogin) > OFFLINE_MS) {
-            return Promise.resolve({
-                ok: false,
-                message: 'Offline session expired (' + OFFLINE_DAYS + ' days). Connect to log in again.'
-            });
-        }
-
-        if (username.toLowerCase() !== storedUser.toLowerCase()) {
-            return Promise.resolve({ ok: false, message: 'Invalid credentials.' });
-        }
-
-        return hashPassword(password, storedSalt).then(function (attempt) {
-            if (attempt !== storedHash) {
-                return { ok: false, message: 'Invalid credentials.' };
-            }
-
-            // ---- Restore the session snapshot ----
-            var snapshot;
-            try {
-                snapshot = JSON.parse(snapshotRaw);
-            } catch (e) {
-                return { ok: false, message: 'Offline session is corrupt. Connect and log in once.' };
-            }
-
-            if (!snapshot || !snapshot.token || !snapshot.user) {
-                return { ok: false, message: 'Offline session incomplete. Connect and log in once.' };
-            }
-
-            // Rehydrate the normal session keys so the rest of the app works
-            try {
-                localStorage.setItem(K_TOKEN, snapshot.token);
-                localStorage.setItem(K_USER, JSON.stringify(snapshot.user));
-                localStorage.setItem(K_TENANT_ID, snapshot.user.tenant_id || '');
-                localStorage.setItem(K_TENANT_NAME, snapshot.tenant_name || '');
-                localStorage.setItem(K_PERMISSIONS, JSON.stringify(snapshot.permissions || []));
-                localStorage.setItem(K_EXPIRES_AT, snapshot.expires_at || '');
-            } catch (e) {
-                return { ok: false, message: 'Could not restore session. Try again.' };
-            }
-
-            return { ok: true };
-        });
-    }
-
-    // ============================================================
-    // PUBLIC API
     // ============================================================
     return {
-        isLoggedIn: isLoggedIn,
-        getCurrentUser: getCurrentUser,
-        getRole: getRole,
-        isSupervisor: isSupervisor,
-        getDefaultLandingPage: getDefaultLandingPage,
-        getTenantName: getTenantName,
-        getPermissions: getPermissions,
-        hasPermission: hasPermission,
-        saveSession: saveSession,
-        clearSession: clearSession,
-        requireLogin: requireLogin,
-        logout: logout,
-
-        // Sprint 1 — offline
-        cacheCredentials:       cacheCredentials,
-        loginOffline:           loginOffline,
-        hasCachedCredentials:   hasCachedCredentials,
-        clearCachedCredentials: clearCachedCredentials
+        login:             login,
+        logout:            logout,
+        isLoggedIn:        isLoggedIn,
+        requireLogin:      requireLogin,
+        getToken:          getToken,
+        getCurrentUser:    getCurrentUser,
+        getTenantName:     getTenantName,
+        isSupervisor:      isSupervisor,
+        getAllProfiles:    getAllProfiles,
+        switchTo:          switchTo,
+        addProfileFromLogin: addProfileFromLogin
     };
+
 })();
