@@ -70,6 +70,8 @@
         <div class="loading-text" id="loadingText">Loading...</div>
     </div>
 
+    <script src="js/vault.js"></script>
+    <script src="js/biometric.js"></script>
     <script src="js/api.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/offline.js"></script>
@@ -85,7 +87,6 @@
                     String(now.getDate()).padStart(2, '0');
             }
 
-            // Refresh on filter change
             var statusEl = document.getElementById('pwFilterStatus');
             if (statusEl) {
                 statusEl.addEventListener('change', function () {
