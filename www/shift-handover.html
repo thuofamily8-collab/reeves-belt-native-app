@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#0a192f">
+    <title>Shift Handover - Reeves Belt App</title>
+    <link rel="stylesheet" href="css/app.css">
+    <link rel="stylesheet" href="css/forms.css">
+    <style>
+        .sh-device-banner {
+            margin: 0 15px 15px;
+            padding: 14px 18px;
+            background: linear-gradient(135deg, rgba(16,185,129,0.15), rgba(5,150,105,0.15));
+            border: 2px solid #10b981;
+            border-radius: 12px;
+        }
+        .sh-device-banner.no-holder {
+            background: linear-gradient(135deg, rgba(245,158,11,0.15), rgba(217,119,6,0.15));
+            border-color: #f59e0b;
+        }
+
+        .sh-guard-card {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px;
+            margin-bottom: 10px;
+            background: linear-gradient(145deg, #1f1f33, #141424);
+            border-radius: 12px;
+            border-left: 4px solid #10b981;
+        }
+        .sh-guard-card.off {
+            border-left-color: #6b7280;
+            opacity: 0.75;
+        }
+
+        .sh-avatar {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            background: linear-gradient(145deg, #00c6ff, #0072ff);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: 800;
+            color: #fff;
+            flex-shrink: 0;
+        }
+
+        .sh-guard-info { flex: 1; min-width: 0; }
+        .sh-guard-name { font-size: 15px; font-weight: 800; color: #fff; }
+        .sh-guard-meta { font-size: 12px; color: #8892b0; margin-top: 2px; }
+
+        .sh-post-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            background: rgba(0,198,255,0.2);
+            border: 1px solid #00c6ff;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: 800;
+            color: #00c6ff;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        .sh-btn {
+            padding: 8px 14px;
+            border: none;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 800;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            flex-shrink: 0;
+        }
+        .sh-btn-holder {
+            background: linear-gradient(145deg, #00c6ff, #0072ff);
+            color: #fff;
+            box-shadow: 0 3px 0 #005bb5;
+        }
+        .sh-btn-end {
+            background: rgba(239,68,68,0.15);
+            color: #ef4444;
+            border: 1px solid #ef4444;
+        }
+
+        .sh-clock-in-form {
+            background: rgba(0,198,255,0.08);
+            border: 1px dashed rgba(0,198,255,0.3);
+            border-radius: 12px;
+            padding: 14px;
+            margin-top: 10px;
+        }
+
+        .sh-modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.85);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            padding: 20px;
+        }
+        .sh-modal.show { display: flex; }
+
+        .sh-modal-box {
+            background: #14192e;
+            border-radius: 16px;
+            padding: 24px;
+            max-width: 400px;
+            width: 100%;
+            border: 2px solid #d4af37;
+        }
+
+        .sh-modal-box h3 {
+            color: #d4af37;
+            font-size: 16px;
+            font-weight: 800;
+            text-align: center;
+            margin-bottom: 16px;
+            letter-spacing: 1px;
+        }
+
+        .sh-modal-input {
+            width: 100%;
+            padding: 16px;
+            border-radius: 12px;
+            background: #0a0e1a;
+            color: #fff;
+            border: 2px solid #d4af37;
+            font-size: 22px;
+            text-align: center;
+            letter-spacing: 8px;
+            font-family: 'Courier New', monospace;
+            font-weight: 700;
+            outline: none;
+            box-sizing: border-box;
+        }
+
+        .sh-modal-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 16px;
+        }
+        .sh-modal-actions button {
+            flex: 1;
+            padding: 14px;
+            border-radius: 10px;
+            border: none;
+            font-size: 13px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            cursor: pointer;
+        }
+        .sh-modal-confirm { background: #10b981; color: #fff; }
+        .sh-modal-cancel  { background: #333; color: #fff; }
+        .sh-modal-error {
+            color: #ef4444;
+            font-size: 12px;
+            text-align: center;
+            margin-top: 8px;
+        }
+
+        .sh-empty {
+            text-align: center;
+            color: #6b7280;
+            font-size: 13px;
+            padding: 20px;
+        }
+
+        .sh-section-label {
+            font-size: 11px;
+            color: #8892b0;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-weight: 800;
+            margin: 18px 5px 10px;
+        }
+    </style>
+</head>
+<body class="form-page">
+
+    <div class="network-bar" id="networkBar"></div>
+
+    <div class="form-container">
+
+        <div class="form-header">
+            <button class="back-btn" onclick="window.location.href='dashboard.html'">←</button>
+            <div class="form-header-title">🔄 Shift Handover</div>
+        </div>
+
+        <div id="shDeviceBanner" class="sh-device-banner">
+            <div style="font-size: 11px; color: #8892b0; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 6px;">📱 Device Held By</div>
+            <div id="shDeviceHolder" style="font-size: 18px; font-weight: 800; color: #10b981;">Loading...</div>
+        </div>
+
+        <div id="shContent">
+            <div class="sh-empty">Loading shift data...</div>
+        </div>
+
+    </div>
+
+    <!-- PIN MODAL -->
+    <div id="shPinModal" class="sh-modal">
+        <div class="sh-modal-box">
+            <h3 id="shPinTitle">Enter Your PIN</h3>
+            <div id="shPinTarget" style="text-align: center; color: #ccd6f6; font-size: 14px; margin-bottom: 14px;"></div>
+            <input type="tel" id="shPinInput" class="sh-modal-input" maxlength="6" placeholder="••••" inputmode="numeric" autocomplete="off">
+            <div id="shPinError" class="sh-modal-error" style="display:none;"></div>
+            <div class="sh-modal-actions">
+                <button class="sh-modal-cancel" onclick="RBShiftHandover.closePinModal()">Cancel</button>
+                <button class="sh-modal-confirm" onclick="RBShiftHandover.confirmPin()">✓ Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text" id="loadingText">Loading...</div>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/offline.js"></script>
+    <script src="js/app.js"></script>
+    <script src="js/shift-common.js"></script>
+    <script src="js/shift-handover.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            RBShiftHandover.init();
+        });
+    </script>
+</body>
+</html>
