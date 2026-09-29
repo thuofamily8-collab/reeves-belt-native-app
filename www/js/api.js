@@ -190,6 +190,44 @@ var RBApi = (function() {
             return request(endpoint, 'GET');
         },
 
+        // ===== SHIFT HANDOVER + DEVICE HOLDER (Sprint 3) =====
+        getPosts: function(includeInactive) {
+            var endpoint = '/staff/posts-list.php';
+            if (includeInactive) endpoint += '?include_inactive=1';
+            return request(endpoint, 'GET');
+        },
+        shiftClockIn: function(postCode, lat, lng, deviceInfo) {
+            return request('/staff/shift-clock-in.php', 'POST', {
+                post_code:   postCode,
+                latitude:    (typeof lat === 'number') ? lat : null,
+                longitude:   (typeof lng === 'number') ? lng : null,
+                device_info: deviceInfo || (navigator.userAgent || '').substring(0, 200)
+            });
+        },
+        shiftClockOut: function(sessionId, reason) {
+            return request('/staff/shift-clock-out.php', 'POST', {
+                session_id: sessionId || null,
+                reason:     reason || 'manual'
+            });
+        },
+        deviceTake: function(deviceInfo, notes) {
+            return request('/staff/device-take.php', 'POST', {
+                device_info: deviceInfo || (navigator.userAgent || '').substring(0, 200),
+                notes:       notes || null
+            });
+        },
+        deviceRelease: function() {
+            return request('/staff/device-release.php', 'POST', {});
+        },
+        getChangeoverData: function() {
+            return request('/staff/shift-changeover.php', 'GET');
+        },
+
+        // ===== POSTS ADMIN (Batch C) =====
+        postCreate: function(data) { return request('/staff/post-create.php', 'POST', data); },
+        postUpdate: function(data) { return request('/staff/post-update.php', 'POST', data); },
+        postDelete: function(postId) { return request('/staff/post-delete.php', 'POST', { post_id: postId }); },
+
         // ===== SUPERVISOR =====
         getSupervisorDashboard: function(tenantId) {
             var endpoint = '/supervisor/dashboard-12hr.php';
