@@ -35,7 +35,7 @@ var RBApp = (function() {
             'guard-shift.html':       'dashboard.html',
             'supervisor-shift.html':  'supervisor.html',
 
-            // Shift management (Sprint 3)
+            // Shift management (Sprint 3+4)
             'shift-handover.html':    'dashboard.html'
         };
 
@@ -98,9 +98,11 @@ var RBApp = (function() {
 
         if (!confirm(msg)) return;
 
-        if (typeof RBAuth !== 'undefined') {
+        if (typeof RBAuth !== 'undefined' && RBAuth.logout) {
             RBAuth.logout();
         } else {
+            // Fallback: old behaviour
+            if (typeof RBVault !== 'undefined') RBVault.clearAll();
             localStorage.clear();
             window.location.href = 'login.html';
         }
