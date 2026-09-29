@@ -45,6 +45,8 @@
         </div>
     </div>
 
+    <script src="js/vault.js"></script>
+    <script src="js/biometric.js"></script>
     <script src="js/api.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/offline.js"></script>
@@ -89,7 +91,7 @@
 
             // ---- Offline login path ----
             function tryOfflineLogin(username, password) {
-                if (!RBAuth.hasCachedCredentials()) {
+                if (typeof RBAuth.hasCachedCredentials !== 'function' || !RBAuth.hasCachedCredentials()) {
                     showError('You are offline and no cached credentials are available. Connect to the internet and log in once.');
                     resetButton();
                     return;
@@ -112,16 +114,26 @@
 
             // ---- Online login path ----
             function doOnlineLogin(username, password, deviceInfo) {
-                RBApi.login(username, password, deviceInfo)
-                    .then(function (response) {
-                        RBAuth.saveSession(response);
-
+                // RBAuth.login now writes into RBVault and sets the active profile.
+                RBAuth.login(username, password, deviceInfo)
+                    .then(function () {
                         // Cache credentials for future offline use
-                        RBAuth.cacheCredentials(username, password).then(function () {
+                        if (typeof RBAuth.cacheCredentials === 'function') {
+                            RBAuth.cacheCredentials(username, password).then(function () {
+                                if (navigator.vibrate) navigator.vibrate(100);
+                                btnText.textContent = 'SUCCESS!';
+                                setTimeout(goToLanding, 400);
+                            }).catch(function () {
+                                // Caching failing shouldn't block login
+                                if (navigator.vibrate) navigator.vibrate(100);
+                                btnText.textContent = 'SUCCESS!';
+                                setTimeout(goToLanding, 400);
+                            });
+                        } else {
                             if (navigator.vibrate) navigator.vibrate(100);
                             btnText.textContent = 'SUCCESS!';
                             setTimeout(goToLanding, 400);
-                        });
+                        }
                     })
                     .catch(function (err) {
                         // Network failure → fall back to offline
@@ -132,7 +144,7 @@
                                     || err.httpStatus === 0
                                     || (err.error && /cannot reach|network|timed out/i.test(err.error));
 
-                        if (isNetErr) {
+                        if (isNetErr && typeof RBAuth.hasCachedCredentials === 'function') {
                             console.log('[login] Network error — trying offline login');
                             tryOfflineLogin(username, password);
                         } else {
