@@ -2,14 +2,14 @@
  * ============================================================
  * VEHICLE EXIT LOGIC
  * ============================================================
- * Computes cargo weight = exit net weight - entry net weight.
- * Displays cargo weight neutrally (no red alerts).
+ * Computes cargo weight, renders direction badge, and shows
+ * a "Recently Exited" section for verification.
  */
 
 var currentVehicle = null;
 
 // ============================================================
-// LOAD VEHICLES INSIDE
+// LOAD VEHICLES INSIDE + RECENTLY EXITED
 // ============================================================
 function loadVehiclesInside() {
     var container = document.getElementById('vehiclesList');
@@ -19,13 +19,17 @@ function loadVehiclesInside() {
 
     RBApi.getVehiclesInside()
         .then(function(res) {
-            var vehicles = res.vehicles || (res.data && res.data.vehicles) || res.data || [];
-            renderVehicles(vehicles);
+            var data = (res && res.data) ? res.data : res;
+            var inside = data.inside || data.vehicles || [];
+            var recent = data.recent_exited || [];
+            renderVehicles(inside);
+            renderRecentlyExited(recent);
         })
         .catch(function(err) {
             console.log('API error, trying offline queue...', err);
             var offlineVehicles = getOfflineQueuedVehicles();
             renderVehicles(offlineVehicles);
+            renderRecentlyExited([]);
             if (offlineVehicles.length === 0) {
                 container.innerHTML =
                     '<div class="empty-state">' +
@@ -58,6 +62,30 @@ function getOfflineQueuedVehicles() {
     }
 }
 
+// ============================================================
+// DIRECTION BADGE (hint from purpose while inside)
+// ============================================================
+function directionBadge(v) {
+    var dir = (v.direction || '').toLowerCase();
+    var purpose = (v.purpose || '').toLowerCase();
+
+    // If we already have a real direction (from an exited row)
+    if (dir === 'inbound')  return '<span style="background:#00c6ff; color:#fff; font-size:10px; font-weight:800; letter-spacing:1px; padding:3px 9px; border-radius:10px;">⬇ INBOUND</span>';
+    if (dir === 'outbound') return '<span style="background:#f59e0b; color:#fff; font-size:10px; font-weight:800; letter-spacing:1px; padding:3px 9px; border-radius:10px;">⬆ OUTBOUND</span>';
+
+    // Hint from purpose while still inside
+    if (/deliver|supplier|receiving|intake|offload|inbound/.test(purpose))
+        return '<span style="background:rgba(0,198,255,0.2); color:#00c6ff; border:1px solid #00c6ff; font-size:10px; font-weight:800; letter-spacing:1px; padding:3px 9px; border-radius:10px;">⬇ EXPECTED INBOUND</span>';
+
+    if (/pick ?up|dispatch|loading|collection|outbound|distributor/.test(purpose))
+        return '<span style="background:rgba(245,158,11,0.2); color:#f59e0b; border:1px solid #f59e0b; font-size:10px; font-weight:800; letter-spacing:1px; padding:3px 9px; border-radius:10px;">⬆ EXPECTED OUTBOUND</span>';
+
+    return '';
+}
+
+// ============================================================
+// RENDER — VEHICLES INSIDE
+// ============================================================
 function renderVehicles(vehicles) {
     var container = document.getElementById('vehiclesList');
     if (!container) return;
@@ -85,11 +113,14 @@ function renderVehicles(vehicles) {
 
         html +=
             '<div class="vehicle-info-card" onclick="openExitModal(' + JSON.stringify(JSON.stringify(v)).replace(/"/g, '&quot;') + ')">' +
-                '<div class="vehicle-info-plate">' + escapeHtml(v.plate_number) + offlineBadge + '</div>' +
+                '<div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">' +
+                    '<div class="vehicle-info-plate">' + escapeHtml(v.plate_number) + offlineBadge + '</div>' +
+                    directionBadge(v) +
+                '</div>' +
                 '<div class="vehicle-info-detail">👤 ' + escapeHtml(v.driver_name || '—') + '</div>' +
                 '<div class="vehicle-info-detail">📋 ' + escapeHtml(v.purpose || '—') + '</div>' +
                 '<div class="vehicle-info-detail">🕐 Entry: ' + entryTime + '</div>' +
-                '<div class="vehicle-info-weight">⚖️ ' + formatNumber(v.entry_weight_kg) + ' KG</div>' +
+                '<div class="vehicle-info-weight">⚖️ Entry: ' + formatNumber(v.entry_weight_kg) + ' KG</div>' +
                 preweighedBadge +
             '</div>';
     }
@@ -97,6 +128,66 @@ function renderVehicles(vehicles) {
     container.innerHTML = html;
 }
 
+// ============================================================
+// RENDER — RECENTLY EXITED
+// ============================================================
+function renderRecentlyExited(vehicles) {
+    var section = document.getElementById('recentExitedSection');
+    var container = document.getElementById('recentExitedList');
+    if (!section || !container) return;
+
+    if (!vehicles || vehicles.length === 0) {
+        section.style.display = 'none';
+        return;
+    }
+
+    section.style.display = 'block';
+    var html = '';
+
+    for (var i = 0; i < vehicles.length; i++) {
+        var v = vehicles[i];
+        var exitTime = v.exit_time ? formatTime(v.exit_time) : '—';
+        var direction = (v.direction || '').toLowerCase();
+
+        var dirBadge;
+        if (direction === 'inbound')
+            dirBadge = '<span style="background:#00c6ff; color:#fff; font-size:10px; font-weight:800; letter-spacing:1px; padding:3px 9px; border-radius:10px;">⬇ INBOUND</span>';
+        else if (direction === 'outbound')
+            dirBadge = '<span style="background:#f59e0b; color:#fff; font-size:10px; font-weight:800; letter-spacing:1px; padding:3px 9px; border-radius:10px;">⬆ OUTBOUND</span>';
+        else
+            dirBadge = '<span style="background:#6b7280; color:#fff; font-size:10px; font-weight:800; letter-spacing:1px; padding:3px 9px; border-radius:10px;">—</span>';
+
+        html +=
+            '<div class="vehicle-info-card" style="opacity:0.85; border-left-color:#10b981;">' +
+                '<div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">' +
+                    '<div class="vehicle-info-plate">' + escapeHtml(v.plate_number) + '</div>' +
+                    dirBadge +
+                '</div>' +
+                '<div class="vehicle-info-detail">👤 ' + escapeHtml(v.driver_name || '—') + '</div>' +
+                '<div class="vehicle-info-detail">🕐 Exit: ' + exitTime + '</div>' +
+                '<div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:10px; padding:10px; background:rgba(16,185,129,0.08); border-radius:8px;">' +
+                    '<div>' +
+                        '<div style="font-size:9px; color:#8892b0; letter-spacing:1px; text-transform:uppercase;">Entry</div>' +
+                        '<div style="font-size:13px; color:#00c6ff; font-weight:700; font-family:\'Courier New\',monospace;">' + formatNumber(v.entry_weight_kg) + '</div>' +
+                    '</div>' +
+                    '<div>' +
+                        '<div style="font-size:9px; color:#8892b0; letter-spacing:1px; text-transform:uppercase;">Exit</div>' +
+                        '<div style="font-size:13px; color:#00c6ff; font-weight:700; font-family:\'Courier New\',monospace;">' + formatNumber(v.exit_weight_kg) + '</div>' +
+                    '</div>' +
+                    '<div>' +
+                        '<div style="font-size:9px; color:#8892b0; letter-spacing:1px; text-transform:uppercase;">Cargo</div>' +
+                        '<div style="font-size:13px; color:#f0d060; font-weight:800; font-family:\'Courier New\',monospace;">' + formatNumber(v.net_weight_kg) + '</div>' +
+                    '</div>' +
+                '</div>' +
+            '</div>';
+    }
+
+    container.innerHTML = html;
+}
+
+// ============================================================
+// HELPERS
+// ============================================================
 function formatTime(dateStr) {
     try {
         var d = new Date(dateStr);
@@ -115,8 +206,10 @@ function formatTime(dateStr) {
 }
 
 function formatNumber(n) {
-    if (!n && n !== 0) return '—';
-    return parseFloat(n).toLocaleString('en-KE', { maximumFractionDigits: 0 });
+    if (n === null || n === undefined || n === '') return '—';
+    var num = parseFloat(n);
+    if (isNaN(num)) return '—';
+    return num.toLocaleString('en-KE', { maximumFractionDigits: 0 });
 }
 
 function escapeHtml(text) {
@@ -186,24 +279,30 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        var cargoWeight = exitWeight - entryWeight;
-        var el = document.getElementById('weightComparison');
+        var cargoWeight = Math.abs(exitWeight - entryWeight);
+        var direction = 'other';
+        if (exitWeight > entryWeight)      direction = 'outbound';
+        else if (exitWeight < entryWeight) direction = 'inbound';
 
-        // Neutral display — no red alerts, no warnings.
+        var dirText = direction === 'inbound'  ? 'INBOUND (truck unloaded)'
+                    : direction === 'outbound' ? 'OUTBOUND (truck loaded)'
+                    : 'NO CARGO CHANGE';
+
+        var el = document.getElementById('weightComparison');
         el.className = 'weight-comparison';
         el.innerHTML =
             '<div style="text-align:center; padding:14px; background:rgba(212,175,55,0.12); border:2px solid #d4af37; border-radius:10px;">' +
                 '<div style="font-size:11px; color:#d4af37; letter-spacing:2px; font-weight:800; text-transform:uppercase; margin-bottom:6px;">Cargo Weight</div>' +
                 '<div style="font-size:26px; color:#f0d060; font-family:\'Courier New\',monospace; font-weight:900; letter-spacing:2px;">' +
-                    (cargoWeight >= 0 ? '+' : '') + formatNumber(cargoWeight) + ' KG' +
+                    formatNumber(cargoWeight) + ' KG' +
                 '</div>' +
-                '<div style="font-size:11px; color:#8892b0; margin-top:6px;">Loaded − Empty</div>' +
+                '<div style="font-size:11px; color:#8892b0; margin-top:6px;">' + dirText + '</div>' +
             '</div>';
     });
 });
 
 // ============================================================
-// SUBMIT EXIT
+// SUBMIT EXIT — direct POST when online, queue only when offline
 // ============================================================
 function submitExit(shouldFlag) {
     if (!currentVehicle) {
@@ -243,25 +342,51 @@ function submitExit(shouldFlag) {
         sync_hash: 'exit-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9)
     };
 
-    OfflineSync.queueRecord('vehicle_exit', exitData);
+    // Decide: direct POST or queue?
+    var online = (typeof RBOffline !== 'undefined')
+        ? RBOffline.isOnline()
+        : navigator.onLine;
 
-    OfflineSync.syncNow().then(function(result) {
+    if (online) {
+        // Direct POST — guaranteed to hit the server
+        RBApi.processVehicleExit(
+            exitData.log_id,
+            exitData.exit_weight,
+            exitData.exit_comment
+        )
+        .then(function () {
+            hideLoading();
+            showToast(shouldFlag ? '⚠️ Vehicle flagged' : '✅ Exit authorized',
+                      shouldFlag ? 'warning' : 'success');
+            if (navigator.vibrate) navigator.vibrate(shouldFlag ? [100, 50, 100] : 200);
+            closeExitModal();
+            setTimeout(loadVehiclesInside, 400);
+        })
+        .catch(function (err) {
+            hideLoading();
+            // Network error? Fall back to queue
+            var isNetErr = !err
+                        || err.code === 'network_error'
+                        || err.code === 'timeout'
+                        || err.code === 'no_response'
+                        || err.httpStatus === 0;
+            if (isNetErr) {
+                OfflineSync.queueRecord('vehicle_exit', exitData);
+                showToast('💾 Saved locally - will sync when online', 'warning');
+                closeExitModal();
+                setTimeout(loadVehiclesInside, 400);
+            } else {
+                showToast('❌ ' + (err.error || 'Exit failed'), 'error');
+            }
+        });
+    } else {
+        // Truly offline — queue
+        OfflineSync.queueRecord('vehicle_exit', exitData);
         hideLoading();
-
-        if (result.synced > 0) {
-            showToast(shouldFlag ? '⚠️ Vehicle flagged' : '✅ Exit authorized', shouldFlag ? 'warning' : 'success');
-        } else {
-            showToast('💾 Saved locally - will sync when online', 'warning');
-        }
-
-        if (navigator.vibrate) navigator.vibrate(shouldFlag ? [100, 50, 100] : 200);
-
+        showToast('💾 Saved locally - will sync when online', 'warning');
         closeExitModal();
-
-        setTimeout(function() {
-            loadVehiclesInside();
-        }, 800);
-    });
+        setTimeout(loadVehiclesInside, 400);
+    }
 }
 
 // ============================================================
@@ -289,8 +414,10 @@ function showToast(message, type) {
 // ============================================================
 document.addEventListener('DOMContentLoaded', function() {
     if (!RBAuth.requireLogin()) return;
+
     loadVehiclesInside();
 
+    // Auto-refresh every 30 seconds
     setInterval(function() {
         if (!document.hidden && !document.getElementById('exitModal').classList.contains('active')) {
             loadVehiclesInside();
