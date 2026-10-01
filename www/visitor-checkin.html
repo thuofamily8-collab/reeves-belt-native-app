@@ -17,13 +17,16 @@
             <div class="form-header-title">👥 Visitor Check-in</div>
         </div>
 
+        <!-- SHIFT BANNER -->
         <div id="rbDutyBanner" style="display:none;"></div>
 
+        <!-- Tab Switcher -->
         <div class="tab-switcher">
             <button class="tab-btn active" id="tabCheckIn" onclick="switchTab('checkin')">✓ Check-In</button>
             <button class="tab-btn" id="tabCheckOut" onclick="switchTab('checkout')">📤 Check-Out</button>
         </div>
 
+        <!-- CHECK-IN VIEW -->
         <div id="checkinView">
             <form id="visitorForm">
 
@@ -144,6 +147,7 @@
             </form>
         </div>
 
+        <!-- CHECK-OUT VIEW -->
         <div id="checkoutView" style="display: none;">
             <div class="info-banner">
                 <strong>👥 Select a visitor</strong> to check them out.
@@ -173,6 +177,7 @@
         <div class="loading-text" id="loadingText">Processing...</div>
     </div>
 
+    <!-- CORE SCRIPTS -->
     <script src="js/vault.js"></script>
     <script src="js/biometric.js"></script>
     <script src="js/api.js"></script>
@@ -180,7 +185,15 @@
     <script src="js/offline.js"></script>
     <script src="js/permissions.js"></script>
     <script src="js/shift-common.js"></script>
+
+    <!-- PRINTER STACK (must come before visitor.js) -->
+    <script src="js/escpos.js"></script>
+    <script src="js/printers.js"></script>
+    <script src="js/label-templates.js"></script>
+
+    <!-- PAGE CONTROLLER -->
     <script src="js/visitor.js"></script>
+
     <script>
     document.addEventListener('DOMContentLoaded', function() {
         if (typeof RBShift !== 'undefined') RBShift.injectBanner();
