@@ -31,27 +31,21 @@
                 <input type="text" id="pwPlate" class="field-input" placeholder="e.g. KDV 123Y" style="text-transform:uppercase;" required>
             </div>
 
-            <div class="field-row">
-                <div class="field">
-                    <label class="field-label">Product</label>
-                    <select id="pwProduct" class="field-input">
-                        <option value="">-- Select --</option>
-                        <option value="Maize">Maize</option>
-                        <option value="Wheat">Wheat</option>
-                        <option value="Barley">Barley</option>
-                        <option value="Sorghum">Sorghum</option>
-                        <option value="Soya">Soya</option>
-                        <option value="Rice">Rice</option>
-                        <option value="Construction Materials">Construction Materials</option>
-                        <option value="Machinery">Machinery</option>
-                        <option value="Fuel">Fuel</option>
-                        <option value="Other">Other</option>
-                    </select>
-                </div>
-                <div class="field">
-                    <label class="field-label">Declared Weight (kg)</label>
-                    <input type="number" id="pwWeight" class="field-input" placeholder="e.g. 28000" inputmode="numeric">
-                </div>
+            <div class="field">
+                <label class="field-label">Product</label>
+                <select id="pwProduct" class="field-input">
+                    <option value="">-- Select --</option>
+                    <option value="Maize">Maize</option>
+                    <option value="Wheat">Wheat</option>
+                    <option value="Barley">Barley</option>
+                    <option value="Sorghum">Sorghum</option>
+                    <option value="Soya">Soya</option>
+                    <option value="Rice">Rice</option>
+                    <option value="Construction Materials">Construction Materials</option>
+                    <option value="Machinery">Machinery</option>
+                    <option value="Fuel">Fuel</option>
+                    <option value="Other">Other</option>
+                </select>
             </div>
 
             <div class="field" style="margin-top:14px;">
@@ -102,13 +96,22 @@
         <div class="loading-text" id="loadingText">Saving...</div>
     </div>
 
+    <!-- CORE SCRIPTS -->
     <script src="js/vault.js"></script>
     <script src="js/biometric.js"></script>
     <script src="js/api.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/offline.js"></script>
     <script src="js/app.js"></script>
+
+    <!-- PRINTER STACK -->
+    <script src="js/escpos.js"></script>
+    <script src="js/printers.js"></script>
+    <script src="js/label-templates.js"></script>
+
+    <!-- PAGE CONTROLLER -->
     <script src="js/preweighed.js"></script>
+
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             RBPreweighed.initAddPage();
