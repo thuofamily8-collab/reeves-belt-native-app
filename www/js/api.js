@@ -60,9 +60,7 @@ var RBApi = (function() {
 
     function setToken(token) {
         var id = (typeof RBVault !== 'undefined') ? RBVault.getActiveId() : null;
-        if (id) {
-            RBVault.updateProfile(id, { token: token });
-        }
+        if (id) RBVault.updateProfile(id, { token: token });
     }
 
     function clearToken() {
@@ -123,9 +121,6 @@ var RBApi = (function() {
                 } else if (xhr.status === 401) {
                     var errMsg  = (response && response.error) ? response.error : 'Session expired';
                     var errCode = (response && response.code)  ? response.code  : 'unauthorized';
-                    // Only wipe stored token if we actually sent one AND
-                    // this wasn't a login attempt (login failures must
-                    // not kill the current active profile).
                     var isLogin = endpoint.indexOf('/auth/login.php') !== -1;
                     if (token && !isLogin) clearToken();
                     reject({ success: false, error: errMsg, code: errCode, httpStatus: 401 });
@@ -174,9 +169,13 @@ var RBApi = (function() {
         // ===== VEHICLE =====
         authorizeVehicle: function(data) { return request('/vehicle/authorize.php', 'POST', data); },
         processVehicleExit: function(logId, exitWeight, exitComment) {
-            return request('/vehicle/exit.php', 'POST', { log_id: logId, exit_weight: exitWeight, exit_comment: exitComment || '' });
+            return request('/vehicle/exit.php', 'POST', {
+                log_id: logId,
+                exit_weight: exitWeight,
+                exit_comment: exitComment || ''
+            });
         },
-        getVehiclesInside: function() { return request('/vehicle/list-inside.php', 'GET'); },
+        getVehiclesInside: function() { return request('/vehicle/list-inside.php?include_recent=1', 'GET'); },
 
         // ===== PENDING CAPTURES =====
         getPendingCaptures: function() { return request('/vehicle/pending-list.php', 'GET'); },
@@ -236,7 +235,7 @@ var RBApi = (function() {
             return request('/staff/shift-changeover.php', 'GET');
         },
 
-        // ===== HOLDER MANAGEMENT (Sprint 4) =====
+        // ===== HOLDER MANAGEMENT =====
         holderTake: function(targetUserId, deviceInfo) {
             return request('/staff/holder-take.php', 'POST', {
                 target_user_id: targetUserId,
@@ -249,8 +248,6 @@ var RBApi = (function() {
         holderStatus: function() {
             return request('/staff/holder-status.php', 'GET');
         },
-
-        // ===== ACT-AS-USER CLOCK (holder clocks another guard) =====
         shiftClockInAs: function(actingUserId, postCode) {
             return request('/staff/shift-clock-in.php', 'POST', {
                 post_code: postCode,
@@ -270,6 +267,107 @@ var RBApi = (function() {
         postUpdate: function(data) { return request('/staff/post-update.php', 'POST', data); },
         postDelete: function(postId) { return request('/staff/post-delete.php', 'POST', { post_id: postId }); },
 
+        // ===== HR — DEPARTMENTS =====
+        hrDepartmentsList: function(includeInactive) {
+            var endpoint = '/hr/departments-list.php';
+            if (includeInactive) endpoint += '?include_inactive=1';
+            return request(endpoint, 'GET');
+        },
+        hrDepartmentCreate: function(data) { return request('/hr/department-create.php', 'POST', data); },
+        hrDepartmentUpdate: function(data) { return request('/hr/department-update.php', 'POST', data); },
+        hrDepartmentDelete: function(id) { return request('/hr/department-delete.php', 'POST', { id: id }); },
+
+        // ===== HR — ROLES =====
+        hrRolesList: function(includeInactive) {
+            var endpoint = '/hr/roles-list.php';
+            if (includeInactive) endpoint += '?include_inactive=1';
+            return request(endpoint, 'GET');
+        },
+        hrRoleCreate: function(data) { return request('/hr/role-create.php', 'POST', data); },
+        hrRoleUpdate: function(data) { return request('/hr/role-update.php', 'POST', data); },
+        hrRoleDelete: function(id) { return request('/hr/role-delete.php', 'POST', { id: id }); },
+
+        // ===== HR — TEMPLATES =====
+        hrTemplateApply: function(templateCode, tenantId, reset) {
+            var body = { template_code: templateCode };
+            if (tenantId) body.tenant_id = tenantId;
+            if (reset) body.reset = 1;
+            return request('/hr/template-apply.php', 'POST', body);
+        },
+
+        // ===== HR — EMPLOYEES =====
+        hrEmployeeList: function(params) {
+            params = params || {};
+            var qs = [];
+            if (params.search)          qs.push('search=' + encodeURIComponent(params.search));
+            if (params.status)          qs.push('status=' + encodeURIComponent(params.status));
+            if (params.department)      qs.push('department=' + encodeURIComponent(params.department));
+            if (params.dept_id)         qs.push('dept_id=' + encodeURIComponent(params.dept_id));
+            if (params.role_id)         qs.push('role_id=' + encodeURIComponent(params.role_id));
+            if (params.attendance_mode) qs.push('attendance_mode=' + encodeURIComponent(params.attendance_mode));
+            if (params.shift_id)        qs.push('shift_id=' + encodeURIComponent(params.shift_id));
+            if (params.limit)           qs.push('limit=' + encodeURIComponent(params.limit));
+            if (params.offset)          qs.push('offset=' + encodeURIComponent(params.offset));
+            if (params.tenant_id)       qs.push('tenant_id=' + encodeURIComponent(params.tenant_id));
+            var endpoint = '/hr/employee-list.php';
+            if (qs.length) endpoint += '?' + qs.join('&');
+            return request(endpoint, 'GET');
+        },
+        hrEmployeeCreate: function(data) { return request('/hr/employee-create.php', 'POST', data); },
+        hrEmployeeUpdate: function(data) { return request('/hr/employee-update.php', 'POST', data); },
+        hrEmployeeDelete: function(id) { return request('/hr/employee-delete.php', 'POST', { id: id }); },
+
+        // ===== HR — EVENTS =====
+        hrGateEvent: function(data) { return request('/hr/gate-event.php', 'POST', data); },
+        hrOfficeEvent: function(data) { return request('/hr/office-event.php', 'POST', data); },
+        hrRecentEvents: function(since, limit) {
+            var endpoint = '/hr/recent-events.php?since=' + encodeURIComponent(since || 0);
+            if (limit) endpoint += '&limit=' + encodeURIComponent(limit);
+            return request(endpoint, 'GET');
+        },
+        hrTodayEvents: function(date, search, direction) {
+            var qs = [];
+            if (date)      qs.push('date=' + encodeURIComponent(date));
+            if (search)    qs.push('search=' + encodeURIComponent(search));
+            if (direction) qs.push('direction=' + encodeURIComponent(direction));
+            var endpoint = '/hr/today-events.php';
+            if (qs.length) endpoint += '?' + qs.join('&');
+            return request(endpoint, 'GET');
+        },
+
+        // ===== HR — REPORTS =====
+        hrAttendanceReport: function(params) {
+            params = params || {};
+            var qs = [];
+            if (params.date_start)      qs.push('date_start=' + encodeURIComponent(params.date_start));
+            if (params.date_end)        qs.push('date_end=' + encodeURIComponent(params.date_end));
+            if (params.employee_id)     qs.push('employee_id=' + encodeURIComponent(params.employee_id));
+            if (params.dept_id)         qs.push('dept_id=' + encodeURIComponent(params.dept_id));
+            if (params.role_id)         qs.push('role_id=' + encodeURIComponent(params.role_id));
+            if (params.attendance_mode) qs.push('attendance_mode=' + encodeURIComponent(params.attendance_mode));
+            if (params.source)          qs.push('source=' + encodeURIComponent(params.source));
+            if (params.status)          qs.push('status=' + encodeURIComponent(params.status));
+            if (params.overtime_only)   qs.push('overtime_only=1');
+            if (params.search)          qs.push('search=' + encodeURIComponent(params.search));
+            if (params.limit)           qs.push('limit=' + encodeURIComponent(params.limit));
+            if (params.offset)          qs.push('offset=' + encodeURIComponent(params.offset));
+            if (params.tenant_id)       qs.push('tenant_id=' + encodeURIComponent(params.tenant_id));
+            var endpoint = '/hr/attendance-report.php';
+            if (qs.length) endpoint += '?' + qs.join('&');
+            return request(endpoint, 'GET');
+        },
+        hrAttendanceSummary: function(date, tenantId) {
+            var qs = [];
+            if (date)     qs.push('date=' + encodeURIComponent(date));
+            if (tenantId) qs.push('tenant_id=' + encodeURIComponent(tenantId));
+            var endpoint = '/hr/attendance-summary.php';
+            if (qs.length) endpoint += '?' + qs.join('&');
+            return request(endpoint, 'GET');
+        },
+        hrAttendanceRollup: function(data) {
+            return request('/hr/attendance-rollup.php', 'POST', data || {});
+        },
+
         // ===== SUPERVISOR =====
         getSupervisorDashboard: function(tenantId) {
             var endpoint = '/supervisor/dashboard-12hr.php';
@@ -286,10 +384,10 @@ var RBApi = (function() {
         getRollCallsList: function(params) {
             params = params || {};
             var qs = [];
-            if (params.tenant_id) qs.push('tenant_id=' + encodeURIComponent(params.tenant_id));
-            if (params.guard_id) qs.push('guard_id=' + encodeURIComponent(params.guard_id));
+            if (params.tenant_id)     qs.push('tenant_id=' + encodeURIComponent(params.tenant_id));
+            if (params.guard_id)      qs.push('guard_id=' + encodeURIComponent(params.guard_id));
             if (params.supervisor_id) qs.push('supervisor_id=' + encodeURIComponent(params.supervisor_id));
-            if (params.limit) qs.push('limit=' + encodeURIComponent(params.limit));
+            if (params.limit)         qs.push('limit=' + encodeURIComponent(params.limit));
             var endpoint = '/supervisor/roll-calls-list.php';
             if (qs.length) endpoint += '?' + qs.join('&');
             return request(endpoint, 'GET');
@@ -307,12 +405,12 @@ var RBApi = (function() {
         preweighedList: function(params) {
             params = params || {};
             var qs = [];
-            if (params.date) qs.push('date=' + encodeURIComponent(params.date));
-            if (params.status) qs.push('status=' + encodeURIComponent(params.status));
-            if (params.plate) qs.push('plate=' + encodeURIComponent(params.plate));
+            if (params.date)                     qs.push('date=' + encodeURIComponent(params.date));
+            if (params.status)                   qs.push('status=' + encodeURIComponent(params.status));
+            if (params.plate)                    qs.push('plate=' + encodeURIComponent(params.plate));
             if (params.active_only !== undefined) qs.push('active_only=' + (params.active_only ? 1 : 0));
-            if (params.limit) qs.push('limit=' + encodeURIComponent(params.limit));
-            if (params.tenant_id) qs.push('tenant_id=' + encodeURIComponent(params.tenant_id));
+            if (params.limit)                    qs.push('limit=' + encodeURIComponent(params.limit));
+            if (params.tenant_id)                qs.push('tenant_id=' + encodeURIComponent(params.tenant_id));
             var endpoint = '/preweighed/list.php';
             if (qs.length) endpoint += '?' + qs.join('&');
             return request(endpoint, 'GET');
@@ -333,16 +431,16 @@ var RBApi = (function() {
             return request('/preweighed/call-in.php', 'POST', { truck_id: truckId });
         },
 
-        // ===== EMPLOYEES =====
+        // ===== EMPLOYEES (AlcoBlow — legacy) =====
         employeesList: function(params) {
             params = params || {};
             var qs = [];
-            if (params.search) qs.push('search=' + encodeURIComponent(params.search));
-            if (params.status) qs.push('status=' + encodeURIComponent(params.status));
+            if (params.search)     qs.push('search=' + encodeURIComponent(params.search));
+            if (params.status)     qs.push('status=' + encodeURIComponent(params.status));
             if (params.department) qs.push('department=' + encodeURIComponent(params.department));
-            if (params.limit) qs.push('limit=' + encodeURIComponent(params.limit));
-            if (params.offset) qs.push('offset=' + encodeURIComponent(params.offset));
-            if (params.tenant_id) qs.push('tenant_id=' + encodeURIComponent(params.tenant_id));
+            if (params.limit)      qs.push('limit=' + encodeURIComponent(params.limit));
+            if (params.offset)     qs.push('offset=' + encodeURIComponent(params.offset));
+            if (params.tenant_id)  qs.push('tenant_id=' + encodeURIComponent(params.tenant_id));
             var endpoint = '/alcohol/employees-list.php';
             if (qs.length) endpoint += '?' + qs.join('&');
             return request(endpoint, 'GET');
@@ -365,12 +463,12 @@ var RBApi = (function() {
             params = params || {};
             var qs = [];
             if (params.date_start) qs.push('date_start=' + encodeURIComponent(params.date_start));
-            if (params.date_end) qs.push('date_end=' + encodeURIComponent(params.date_end));
-            if (params.result) qs.push('result=' + encodeURIComponent(params.result));
-            if (params.search) qs.push('search=' + encodeURIComponent(params.search));
-            if (params.limit) qs.push('limit=' + encodeURIComponent(params.limit));
-            if (params.offset) qs.push('offset=' + encodeURIComponent(params.offset));
-            if (params.tenant_id) qs.push('tenant_id=' + encodeURIComponent(params.tenant_id));
+            if (params.date_end)   qs.push('date_end=' + encodeURIComponent(params.date_end));
+            if (params.result)     qs.push('result=' + encodeURIComponent(params.result));
+            if (params.search)     qs.push('search=' + encodeURIComponent(params.search));
+            if (params.limit)      qs.push('limit=' + encodeURIComponent(params.limit));
+            if (params.offset)     qs.push('offset=' + encodeURIComponent(params.offset));
+            if (params.tenant_id)  qs.push('tenant_id=' + encodeURIComponent(params.tenant_id));
             var endpoint = '/alcohol/test-list.php';
             if (qs.length) endpoint += '?' + qs.join('&');
             return request(endpoint, 'GET');
