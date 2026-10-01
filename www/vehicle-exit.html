@@ -44,17 +44,20 @@
             </div>
 
             <div class="field">
-                <label class="field-label">Entry Weight</label>
+                <label class="field-label">Entry Net Weight (Empty)</label>
                 <input type="text" id="modalEntryWeight" class="field-input" readonly style="background:rgba(0,198,255,0.08); border-color:rgba(0,198,255,0.3); color:#00c6ff; font-weight:700;">
             </div>
 
             <div class="field">
-                <label class="field-label">Exit Weight (kg) *</label>
-                <input type="number" id="modalExitWeight" class="field-input" placeholder="e.g. 29500" inputmode="numeric" autocomplete="off">
+                <label class="field-label">Net Weight (kg) - Loaded Truck *</label>
+                <input type="number" id="modalExitWeight" class="field-input" placeholder="Read from weighbridge" inputmode="numeric" autocomplete="off">
+                <div style="font-size:11px; color:#8892b0; margin-top:5px;">
+                    ⚖️ Enter the truck's loaded weight as shown on the weighbridge
+                </div>
             </div>
 
             <div id="weightComparison" class="weight-comparison">
-                <div class="comparison-placeholder">Enter exit weight to compare</div>
+                <div class="comparison-placeholder">Enter loaded weight to compute cargo weight</div>
             </div>
 
             <div class="field">
