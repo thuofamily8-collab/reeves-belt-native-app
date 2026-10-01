@@ -3,6 +3,7 @@
  * VEHICLE ENTRY LOGIC
  * ============================================================
  * Supports ?pending=N to pre-fill from a called-in pre-weighed truck.
+ * Fetches a pass number, submits entry, prints gate entry pass.
  */
 
 var vehicleStream = null;
@@ -260,58 +261,113 @@ function submitEntry() {
     if (!purpose) { showToast('Select purpose', 'error'); return; }
     if (!entryWeight || entryWeight <= 0) { showToast('Enter valid weight', 'error'); return; }
 
-    showLoading('Recording entry...');
+    showLoading('Fetching pass number...');
 
-    var data = {
-        plate_number: plate,
-        vehicle_type: vehicleType,
-        vehicle_model: document.getElementById('vehicleModel').value.trim(),
-        vehicle_color: document.getElementById('vehicleColor').value.trim(),
-        driver_name: driverName,
-        driver_id: driverId,
-        driver_phone: driverPhone,
-        purpose: purpose,
-        entry_weight_kg: entryWeight,
-        entry_comment: entryComment,
-        vehicle_photo_data: capturedPhotoData,
-        photo_captured_at: capturedTimestamp,
-        sync_hash: generateSyncHash()
-    };
+    // Step 1 — fetch a pass number from the server
+    RBApi.request('/vehicle/pass-number.php', 'POST', {}).then(function (res) {
+        var passNo = (res && res.pass_no) || (res.data && res.data.pass_no) || '';
+        continueWithPassNo(passNo);
+    }).catch(function (err) {
+        // If the endpoint fails, proceed without a pass number
+        // (server will generate one inline)
+        console.warn('[vehicle-entry] pass-number fetch failed:', err);
+        continueWithPassNo('');
+    });
 
-    // If prefilled from a pending capture, mark it complete FIRST
-    if (pendingEntryId) {
-        RBApi.completeVehicleEntry({
-            entry_id: pendingEntryId,
-            vehicle_model: data.vehicle_model,
-            vehicle_color: data.vehicle_color
-        }).then(function () {
-            console.log('[vehicle-entry] Pending capture completed');
-            continueWithQueue();
-        }).catch(function (e) {
-            console.warn('[vehicle-entry] Could not complete pending:', e);
-            continueWithQueue();
-        });
-    } else {
-        continueWithQueue();
+    function continueWithPassNo(passNo) {
+        showLoading('Recording entry...');
+
+        var data = {
+            plate_number: plate,
+            vehicle_type: vehicleType,
+            vehicle_model: document.getElementById('vehicleModel').value.trim(),
+            vehicle_color: document.getElementById('vehicleColor').value.trim(),
+            driver_name: driverName,
+            driver_id: driverId,
+            driver_phone: driverPhone,
+            purpose: purpose,
+            entry_weight_kg: entryWeight,
+            entry_comment: entryComment,
+            vehicle_photo_data: capturedPhotoData,
+            photo_captured_at: capturedTimestamp,
+            pass_no: passNo,
+            sync_hash: generateSyncHash()
+        };
+
+        // If prefilled from a pending capture, mark it complete FIRST
+        if (pendingEntryId) {
+            RBApi.completeVehicleEntry({
+                entry_id: pendingEntryId,
+                vehicle_model: data.vehicle_model,
+                vehicle_color: data.vehicle_color
+            }).then(function () {
+                continueWithQueue(passNo);
+            }).catch(function (e) {
+                console.warn('[vehicle-entry] Could not complete pending:', e);
+                continueWithQueue(passNo);
+            });
+        } else {
+            continueWithQueue(passNo);
+        }
     }
 
-    function continueWithQueue() {
-        OfflineSync.queueRecord('vehicle_entry', data);
+    function continueWithQueue(passNo) {
+        // Decide: direct POST or queue?
+        var online = (typeof RBOffline !== 'undefined') ? RBOffline.isOnline() : navigator.onLine;
 
-        OfflineSync.syncNow().then(function (result) {
+        if (online) {
+            // Direct POST — instant
+            RBApi.request('/camera/detect.php', 'POST', {
+                plate_number: plate,
+                vehicle_type: data.vehicle_type,
+                vehicle_model: data.vehicle_model,
+                vehicle_color: data.vehicle_color,
+                driver_name: driverName,
+                driver_id: driverId,
+                driver_phone: driverPhone,
+                purpose: purpose,
+                entry_weight_kg: entryWeight,
+                entry_comment: entryComment,
+                vehicle_photo_data: capturedPhotoData,
+                photo_captured_at: capturedTimestamp,
+                pass_no: passNo,
+                sync_hash: data.sync_hash
+            }).then(function (res) {
+                hideLoading();
+                showToast('✅ Entry recorded', 'success');
+                if (navigator.vibrate) navigator.vibrate(200);
+
+                // Print the pass (best-effort — never blocks navigation)
+                if (typeof RBGatePasses !== 'undefined') {
+                    var log = (res && res.data) ? res.data : res;
+                    RBGatePasses.printEntryPass(log).catch(function (err) {
+                        console.warn('[vehicle-entry] Print failed:', err);
+                        showToast('⚠️ Pass printed failed — retry from Vehicle Exit', 'warning');
+                    });
+                }
+
+                setTimeout(function () {
+                    window.location.href = 'dashboard.html';
+                }, 1500);
+            }).catch(function (err) {
+                hideLoading();
+                // Fall back to queue
+                OfflineSync.queueRecord('vehicle_entry', data);
+                OfflineSync.syncNow();
+                showToast('💾 Saved locally — will sync when online', 'warning');
+                setTimeout(function () {
+                    window.location.href = 'dashboard.html';
+                }, 1500);
+            });
+        } else {
+            // Offline — queue
+            OfflineSync.queueRecord('vehicle_entry', data);
             hideLoading();
-            if (result.synced > 0) {
-                showToast('✅ Entry recorded and synced', 'success');
-            } else {
-                showToast('💾 Saved locally - will sync when online', 'warning');
-            }
-
-            if (navigator.vibrate) navigator.vibrate(200);
-
+            showToast('💾 Saved locally — will sync when online', 'warning');
             setTimeout(function () {
                 window.location.href = 'dashboard.html';
-            }, 1200);
-        });
+            }, 1500);
+        }
     }
 }
 
