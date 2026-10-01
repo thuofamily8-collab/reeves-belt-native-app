@@ -2,6 +2,8 @@
  * ============================================================
  * VEHICLE EXIT LOGIC
  * ============================================================
+ * Computes cargo weight = exit net weight - entry net weight.
+ * Displays cargo weight neutrally (no red alerts).
  */
 
 var currentVehicle = null;
@@ -77,9 +79,8 @@ function renderVehicles(vehicles) {
             ? '<span style="background:#f59e0b; color:#fff; padding:2px 6px; border-radius:8px; font-size:9px; margin-left:5px;">LOCAL</span>'
             : '';
 
-        // Pre-weighed badge
         var preweighedBadge = v.preweighed_code
-            ? '<div style="display:inline-block; margin-top:8px; padding:3px 8px; background:rgba(212,175,55,0.15); border:1px solid rgba(212,175,55,0.4); border-radius:6px; font-size:10px; color:#f0d060; font-weight:700; letter-spacing:1px;">📥 PRE-WEIGHED · ' + escapeHtml(v.preweighed_code) + '</div>'
+            ? '<div style="display:inline-block; margin-top:8px; padding:3px 8px; background:rgba(212,175,55,0.15); border:1px solid rgba(212,175,55,0.4); border-radius:6px; font-size:10px; color:#f0d060; font-weight:700; letter-spacing:1px;">📥 PRE-WEIGHED • ' + escapeHtml(v.preweighed_code) + '</div>'
             : '';
 
         html +=
@@ -162,11 +163,11 @@ function closeExitModal() {
 function resetComparison() {
     var el = document.getElementById('weightComparison');
     el.className = 'weight-comparison';
-    el.innerHTML = '<div class="comparison-placeholder">Enter exit weight to compare</div>';
+    el.innerHTML = '<div class="comparison-placeholder">Enter loaded weight to compute cargo weight</div>';
 }
 
 // ============================================================
-// LIVE WEIGHT COMPARISON
+// LIVE CARGO WEIGHT COMPUTATION (neutral, no alerts)
 // ============================================================
 document.addEventListener('DOMContentLoaded', function() {
     var exitInput = document.getElementById('modalExitWeight');
@@ -185,48 +186,19 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        var net = exitWeight - entryWeight;
+        var cargoWeight = exitWeight - entryWeight;
         var el = document.getElementById('weightComparison');
-        var purpose = currentVehicle.purpose || '';
 
-        var alert = false;
-        var message = '';
-
-        if (purpose === 'Deliver Raw Maize' || purpose === 'Deliver Raw Wheat') {
-            if (net < 0) {
-                alert = true;
-                message = 'Weight LOSS detected — expected gain';
-            } else {
-                message = 'Net material delivered';
-            }
-        } else if (purpose === 'Pick Up Finished Goods') {
-            if (net < 0) {
-                alert = true;
-                message = 'Weight LOSS detected — expected gain';
-            } else {
-                message = 'Net goods dispatched';
-            }
-        } else {
-            message = 'Weight difference recorded';
-            if (Math.abs(net) > 1000) {
-                alert = true;
-                message = 'Large weight change detected';
-            }
-        }
-
-        if (alert) {
-            el.className = 'weight-comparison alert';
-            el.innerHTML =
-                '<div class="comparison-alert">⚠️ Net: ' +
-                (net >= 0 ? '+' : '') + formatNumber(net) + ' KG</div>' +
-                '<div class="comparison-message">' + message + '</div>';
-        } else {
-            el.className = 'weight-comparison success';
-            el.innerHTML =
-                '<div class="comparison-success">✓ Net: ' +
-                (net >= 0 ? '+' : '') + formatNumber(net) + ' KG</div>' +
-                '<div class="comparison-message">' + message + '</div>';
-        }
+        // Neutral display — no red alerts, no warnings.
+        el.className = 'weight-comparison';
+        el.innerHTML =
+            '<div style="text-align:center; padding:14px; background:rgba(212,175,55,0.12); border:2px solid #d4af37; border-radius:10px;">' +
+                '<div style="font-size:11px; color:#d4af37; letter-spacing:2px; font-weight:800; text-transform:uppercase; margin-bottom:6px;">Cargo Weight</div>' +
+                '<div style="font-size:26px; color:#f0d060; font-family:\'Courier New\',monospace; font-weight:900; letter-spacing:2px;">' +
+                    (cargoWeight >= 0 ? '+' : '') + formatNumber(cargoWeight) + ' KG' +
+                '</div>' +
+                '<div style="font-size:11px; color:#8892b0; margin-top:6px;">Loaded − Empty</div>' +
+            '</div>';
     });
 });
 
@@ -245,7 +217,7 @@ function submitExit(shouldFlag) {
     var exitComment = exitCommentEl ? exitCommentEl.value.trim() : '';
 
     if (!exitWeight || exitWeight <= 0) {
-        showToast('Enter valid exit weight', 'error');
+        showToast('Enter valid loaded weight', 'error');
         return;
     }
 
