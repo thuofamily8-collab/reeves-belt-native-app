@@ -474,6 +474,48 @@ var RBApi = (function() {
             return request(endpoint, 'GET');
         },
 
+        // ============================================================
+        // ===== GUARD CLOCK-IN (Batch 5a) ===========================
+        // ============================================================
+        // Terminals available for binding (first-launch setup screen)
+        getGuardTerminals: function(clientTenantId) {
+            var endpoint = '/guards/terminal-list.php';
+            if (clientTenantId) endpoint += '?client_tenant_id=' + encodeURIComponent(clientTenantId);
+            return request(endpoint, 'GET');
+        },
+
+        // Bind this phone to a terminal (called once, on first launch)
+        // Payload: { terminal_id, device_udid, device_model }
+        bindGuardTerminal: function(payload) {
+            return request('/guards/terminal-bind.php', 'POST', payload || {});
+        },
+
+        // Fetch the roster for a bound terminal
+        // Returns: { terminal, date, week, guards: [...], count }
+        getGuardRoster: function(terminalId, postOnly) {
+            var endpoint = '/guards/roster.php?terminal_id=' + encodeURIComponent(terminalId);
+            if (postOnly) endpoint += '&post_only=1';
+            return request(endpoint, 'GET');
+        },
+
+        // Clock a guard in.
+        // Payload: { terminal_id, guard_id, method:'pin'|'face'|'biometric'|'supervisor', pin, confidence, evidence_id }
+        guardClockIn: function(payload) {
+            return request('/guards/clockin.php', 'POST', payload || {});
+        },
+
+        // Clock a guard out.
+        // Payload: { terminal_id, guard_id, method:'pin'|'supervisor', pin }
+        guardClockOut: function(payload) {
+            return request('/guards/clockout.php', 'POST', payload || {});
+        },
+
+        // Set or reset a guard's PIN (supervisor only).
+        // Payload: { guard_id, new_pin }
+        setGuardPin: function(payload) {
+            return request('/guards/set-pin.php', 'POST', payload || {});
+        },
+
         // ===== DETECT (SIMULATE) =====
         triggerDetection: function(type) { return request('/camera/detect.php', 'POST', { type: type || 'vehicle' }); }
     };
