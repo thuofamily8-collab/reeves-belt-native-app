@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#0a192f">
+    <title>Bind Terminal - Reeves Belt</title>
+    <link rel="stylesheet" href="css/app.css">
+    <link rel="stylesheet" href="css/forms.css">
+</head>
+<body class="form-page">
+
+    <div class="network-bar" id="networkBar"></div>
+
+    <div class="form-container">
+
+        <div class="form-header">
+            <div class="form-header-title">📱 Bind This Phone</div>
+        </div>
+
+        <div class="form-card">
+            <div class="form-card-title">One-Time Setup</div>
+
+            <div class="info-banner" style="margin-bottom: 16px;">
+                This phone will be permanently bound to a specific post. Guards stationed here will use it to clock in.
+                <strong>You only need to do this once.</strong>
+            </div>
+
+            <div class="field">
+                <label class="field-label">Site</label>
+                <input type="text" class="field-input" id="tSite" readonly value="Loading...">
+            </div>
+
+            <div class="field">
+                <label class="field-label">Terminal</label>
+                <select class="field-input" id="tTerminal">
+                    <option value="">Loading...</option>
+                </select>
+            </div>
+
+            <div class="field">
+                <label class="field-label">Device Model (auto)</label>
+                <input type="text" class="field-input" id="tDevice" readonly value="Detecting...">
+            </div>
+
+            <div id="tError" class="info-banner error" style="display:none; margin-top: 12px;"></div>
+
+            <div style="margin-top: 20px;">
+                <button class="action-btn blue" id="tBindBtn" onclick="RBTerminalBind.bind()" style="width:100%;">
+                    ✓ Bind This Phone
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text" id="loadingText">Loading...</div>
+    </div>
+
+    <script src="js/vault.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/app.js"></script>
+    <script>
+        var RBTerminalBind = (function() {
+
+            var _terminals = [];
+
+            function showError(msg) {
+                var el = document.getElementById('tError');
+                if (el) { el.textContent = msg; el.style.display = 'block'; }
+            }
+
+            function hideError() {
+                var el = document.getElementById('tError');
+                if (el) el.style.display = 'none';
+            }
+
+            function loadTerminals() {
+                RBApi.getGuardTerminals()
+                    .then(function(res) {
+                        _terminals = (res && res.terminals) || [];
+
+                        // Populate device info
+                        var dev = document.getElementById('tDevice');
+                        if (dev) {
+                            var model = (navigator.userAgent || '').substring(0, 60);
+                            dev.value = model;
+                        }
+
+                        var sel = document.getElementById('tTerminal');
+                        if (!sel) return;
+
+                        if (_terminals.length === 0) {
+                            sel.innerHTML = '<option value="">No terminals configured</option>';
+                            showError('No terminals available. Ask admin to configure.');
+                            return;
+                        }
+
+                        var opts = ['<option value="">Select terminal...</option>'];
+                        for (var i = 0; i < _terminals.length; i++) {
+                            var t = _terminals[i];
+                            opts.push('<option value="' + t.id + '">' + t.terminal_name +
+                                ' → ' + t.post_name + '</option>');
+                        }
+                        sel.innerHTML = opts.join('');
+
+                        // Populate site
+                        var siteEl = document.getElementById('tSite');
+                        if (siteEl) {
+                            var sample = _terminals[0];
+                            siteEl.value = (sample.client_name || 'Unknown') +
+                                ' (' + (sample.client_code || '') + ')';
+                        }
+                    })
+                    .catch(function(err) {
+                        showError('Could not load terminals: ' + ((err && err.error) || 'network error'));
+                    });
+            }
+
+            function getDeviceUdid() {
+                // Use a persistent random ID — Capacitor's Device plugin gives
+                // us the real one, but for web fallback we generate + store.
+                var key = 'rb_device_udid';
+                var existing = localStorage.getItem(key);
+                if (existing) return Promise.resolve(existing);
+
+                // Try Capacitor
+                if (window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.Device) {
+                    return Capacitor.Plugins.Device.getId()
+                        .then(function(r) {
+                            var id = (r && r.identifier) ? r.identifier : gen();
+                            localStorage.setItem(key, id);
+                            return id;
+                        })
+                        .catch(function() {
+                            var id = gen();
+                            localStorage.setItem(key, id);
+                            return id;
+                        });
+                }
+
+                var id = gen();
+                localStorage.setItem(key, id);
+                return Promise.resolve(id);
+
+                function gen() {
+                    return 'web-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
+                }
+            }
+
+            function bind() {
+                hideError();
+
+                var sel = document.getElementById('tTerminal');
+                var terminalId = sel ? parseInt(sel.value, 10) : 0;
+
+                if (!terminalId) {
+                    showError('Please select a terminal');
+                    return;
+                }
+
+                var loading = document.getElementById('loadingOverlay');
+                if (loading) loading.classList.add('show');
+
+                getDeviceUdid().then(function(udid) {
+                    var model = (navigator.userAgent || '').substring(0, 60);
+
+                    return RBApi.bindGuardTerminal({
+                        terminal_id: terminalId,
+                        device_udid: udid,
+                        device_model: model
+                    });
+                })
+                .then(function(res) {
+                    if (loading) loading.classList.remove('show');
+
+                    // Persist terminal_id + post info for later use
+                    var term = (res && res.terminal) ? res.terminal : res;
+                    if (term && term.id) {
+                        localStorage.setItem('rb_terminal_id',       term.id);
+                        localStorage.setItem('rb_terminal_name',     term.terminal_name || '');
+                        localStorage.setItem('rb_terminal_post_id',  term.post_id || '');
+                        localStorage.setItem('rb_terminal_post_name',term.post_name || '');
+                        localStorage.setItem('rb_terminal_client_id',term.client_tenant_id || '');
+                        localStorage.setItem('rb_terminal_client_name',term.client_name || '');
+                    }
+
+                    if (navigator.vibrate) navigator.vibrate(100);
+
+                    if (typeof RBApp !== 'undefined' && RBApp.showToast) {
+                        RBApp.showToast('✅ Phone bound', 'success');
+                    }
+
+                    setTimeout(function() {
+                        window.location.href = 'shift-handover.html';
+                    }, 800);
+                })
+                .catch(function(err) {
+                    if (loading) loading.classList.remove('show');
+                    var msg = (err && err.error) ? err.error : 'Binding failed';
+                    showError(msg);
+                });
+            }
+
+            function init() {
+                if (!RBAuth.requireLogin()) return;
+                loadTerminals();
+            }
+
+            return { init: init, bind: bind };
+        })();
+
+        document.addEventListener('DOMContentLoaded', function() {
+            RBTerminalBind.init();
+        });
+    </script>
+</body>
+</html>
