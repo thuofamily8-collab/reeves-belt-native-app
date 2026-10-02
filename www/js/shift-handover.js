@@ -331,4 +331,134 @@ var RBShiftHandover = (function () {
                 closePinModal();
                 if (navigator.vibrate) navigator.vibrate(100);
                 showToast('✅ ' + p.guard_name + ' clocked in', 'success');
-                setTimeout(function() { loadRoster(true); },
+                setTimeout(function() { loadRoster(true); }, 400);
+            })
+            .catch(function(err) {
+                hideLoading();
+                showPinError((err && err.error) ? err.error : 'Clock-in failed');
+            });
+
+        } else if (p.type === 'clock_out') {
+            RBApi.guardClockOut({
+                terminal_id: _terminalId,
+                guard_id:    p.guard_id,
+                method:      'pin',
+                pin:         pin
+            })
+            .then(function(res) {
+                hideLoading();
+                closePinModal();
+                if (navigator.vibrate) navigator.vibrate(100);
+                showToast('✅ ' + p.guard_name + ' shift ended', 'success');
+                setTimeout(function() { loadRoster(true); }, 400);
+            })
+            .catch(function(err) {
+                hideLoading();
+                showPinError((err && err.error) ? err.error : 'Clock-out failed');
+            });
+
+        } else if (p.type === 'set_pin') {
+            // Confirm the PIN format
+            if (!/^\d{4,6}$/.test(pin)) {
+                hideLoading();
+                showPinError('PIN must be 4–6 digits');
+                return;
+            }
+            RBApi.setGuardPin({ guard_id: p.guard_id, new_pin: pin })
+            .then(function(res) {
+                hideLoading();
+                closePinModal();
+                if (navigator.vibrate) navigator.vibrate(100);
+                showToast('✅ PIN set for ' + p.guard_name, 'success');
+                setTimeout(function() { loadRoster(true); }, 400);
+            })
+            .catch(function(err) {
+                hideLoading();
+                showPinError((err && err.error) ? err.error : 'Set PIN failed');
+            });
+        }
+    }
+
+    // ---- Public actions ----
+    function openClockIn(guardId) {
+        var g = findGuard(guardId);
+        if (!g) return;
+        _pending = { type: 'clock_in', guard_id: guardId, guard_name: g.full_name };
+        showPinModal('Enter ' + g.full_name + '\'s PIN', g.full_name + ' · ' + (g.post_name || ''));
+    }
+
+    function openClockOut(guardId) {
+        var g = findGuard(guardId);
+        if (!g) return;
+        if (!confirm('End shift for ' + g.full_name + '?')) return;
+        _pending = { type: 'clock_out', guard_id: guardId, guard_name: g.full_name };
+        showPinModal('Enter ' + g.full_name + '\'s PIN to End', g.full_name + ' · ' + (g.post_name || ''));
+    }
+
+    function openSetPin(guardId) {
+        var g = findGuard(guardId);
+        if (!g) return;
+        _pending = { type: 'set_pin', guard_id: guardId, guard_name: g.full_name };
+        showPinModal('Set PIN for ' + g.full_name, 'Enter a 4–6 digit PIN');
+    }
+
+    function findGuard(guardId) {
+        for (var i = 0; i < _roster.length; i++) {
+            if (_roster[i].guard_id === guardId) return _roster[i];
+        }
+        return null;
+    }
+
+    function showSupervisorMenu() {
+        var choice = prompt(
+            'Supervisor Menu\n\n' +
+            '1. Rebind this phone to a different terminal\n' +
+            '2. Refresh roster\n' +
+            '3. Show guard list with PIN status\n\n' +
+            'Enter a number:'
+        );
+        if (choice === '1') {
+            if (confirm('Rebind this phone? You will be logged out of the current terminal.')) {
+                localStorage.removeItem('rb_terminal_id');
+                localStorage.removeItem('rb_terminal_name');
+                localStorage.removeItem('rb_terminal_post_id');
+                localStorage.removeItem('rb_terminal_post_name');
+                localStorage.removeItem('rb_terminal_client_id');
+                localStorage.removeItem('rb_terminal_client_name');
+                window.location.href = 'terminal-bind.html';
+            }
+        } else if (choice === '2') {
+            loadRoster();
+        } else if (choice === '3') {
+            var lines = _roster.map(function(g) {
+                return (g.has_pin ? '✅' : '⚠️') + ' ' + g.employee_code + ' · ' + g.full_name;
+            }).join('\n');
+            alert('Guards:\n\n' + lines);
+        }
+    }
+
+    function unbindTerminal() {
+        if (!confirm('Unbind this phone? It will need to be re-bound before guards can clock in.')) return;
+        localStorage.removeItem('rb_terminal_id');
+        localStorage.removeItem('rb_terminal_name');
+        localStorage.removeItem('rb_terminal_post_id');
+        localStorage.removeItem('rb_terminal_post_name');
+        localStorage.removeItem('rb_terminal_client_id');
+        localStorage.removeItem('rb_terminal_client_name');
+        window.location.href = 'terminal-bind.html';
+    }
+
+    // ---- Public API ----
+    return {
+        init:                 init,
+        loadRoster:           loadRoster,
+        switchTab:            switchTab,
+        openClockIn:          openClockIn,
+        openClockOut:         openClockOut,
+        openSetPin:           openSetPin,
+        showSupervisorMenu:   showSupervisorMenu,
+        unbindTerminal:       unbindTerminal,
+        closePinModal:        closePinModal,
+        confirmPin:           confirmPin
+    };
+})();
