@@ -1,246 +1,599 @@
-/**
- * Patrol Scan — reads checkpoints from guard_posts, logs to patrol_scans.
- * Guard checkout flow: guard taps his name + PIN → all his scans tagged.
- */
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0a0e1a">
+<title>Patrol Scan — Reeves Belt App</title>
 
-var RBPatrolScan = (function() {
+<link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="css/forms.css">
 
-    var _terminalId = null;
-    var _points     = [];
-    var _holder     = null;    // current patrol guard
+<style>
+.patrol-header {
+    background: linear-gradient(135deg, #0a0e1a 0%, #1a1f3a 100%);
+    color: #d4af37;
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-bottom: 2px solid #d4af37;
+}
+.patrol-header h1 {
+    font-size: 18px;
+    margin: 0;
+    flex: 1;
+    font-weight: 600;
+}
+.patrol-back {
+    background: none;
+    border: none;
+    color: #d4af37;
+    font-size: 22px;
+    cursor: pointer;
+    padding: 4px 8px;
+}
 
-    function $(id) { return document.getElementById(id); }
+.progress-card {
+    background: #14192e;
+    border-radius: 12px;
+    margin: 16px;
+    padding: 16px;
+    color: #fff;
+}
+.progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+.progress-percent {
+    font-size: 28px;
+    font-weight: 700;
+    color: #d4af37;
+}
+.progress-bar {
+    height: 8px;
+    background: #2a3155;
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 10px 0;
+}
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #d4af37 0%, #f0d060 100%);
+    transition: width 0.3s ease;
+}
+.progress-stats {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    color: #a0a8c0;
+}
+.progress-stats span b {
+    color: #fff;
+}
 
-    function esc(t) {
-        if (!t) return '';
-        var d = document.createElement('div');
-        d.textContent = t;
-        return d.innerHTML;
+.scanner-card {
+    background: #14192e;
+    border-radius: 12px;
+    margin: 16px;
+    padding: 16px;
+    color: #fff;
+}
+
+.scanner-frame {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    background: #000;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+#scannerPlaceholder {
+    color: #666;
+    text-align: center;
+    padding: 20px;
+}
+#scannerPlaceholder .icon {
+    font-size: 48px;
+    display: block;
+    margin-bottom: 8px;
+}
+.scanner-buttons {
+    display: flex;
+    gap: 10px;
+}
+.scanner-buttons button {
+    flex: 1;
+    padding: 14px;
+    border-radius: 8px;
+    border: none;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+.btn-start {
+    background: linear-gradient(135deg, #d4af37, #f0d060);
+    color: #0a0e1a;
+    box-shadow: 0 4px 0 #b8860b;
+}
+.btn-start:active { transform: translateY(2px); box-shadow: 0 2px 0 #b8860b; }
+
+#rbScannerOverlay {
+    position: fixed;
+    inset: 0;
+    background: #000;
+    z-index: 99999;
+    display: none;
+    flex-direction: column;
+}
+#rbScannerOverlay.show {
+    display: flex;
+}
+
+#rbScannerOverlay video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    z-index: 1;
+}
+
+#rbScannerFrame {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 78vw;
+    height: 78vw;
+    max-width: 78vh;
+    max-height: 78vh;
+    border: 3px solid #22c55e;
+    border-radius: 16px;
+    box-shadow:
+        0 0 0 9999px rgba(0,0,0,0.55),
+        0 0 24px rgba(34, 197, 94, 0.8),
+        inset 0 0 24px rgba(34, 197, 94, 0.3);
+    z-index: 2;
+    pointer-events: none;
+}
+
+#rbScannerFrame::before,
+#rbScannerFrame::after {
+    content: '';
+    position: absolute;
+    width: 40px;
+    height: 40px;
+    border: 4px solid #22c55e;
+}
+#rbScannerFrame::before {
+    top: -4px; left: -4px;
+    border-right: none; border-bottom: none;
+    border-top-left-radius: 16px;
+}
+#rbScannerFrame::after {
+    bottom: -4px; right: -4px;
+    border-left: none; border-top: none;
+    border-bottom-right-radius: 16px;
+}
+
+#rbScannerTop {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%);
+    z-index: 3;
+    color: #fff;
+}
+#rbScannerTop .title {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: #d4af37;
+    text-transform: uppercase;
+}
+#rbScannerClose {
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.3);
+    color: #fff;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    font-size: 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+}
+
+#rbScannerBottom {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    padding: 24px 20px 40px;
+    text-align: center;
+    background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%);
+    color: #fff;
+    z-index: 3;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+#rbScannerBottom .hint-icon {
+    font-size: 22px;
+    display: block;
+    margin-bottom: 6px;
+}
+
+#rbScannerFlash {
+    position: absolute;
+    inset: 0;
+    background: rgba(34, 197, 94, 0.85);
+    z-index: 4;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 10px;
+    color: #fff;
+}
+#rbScannerFlash.show {
+    display: flex;
+    animation: flashIn 0.25s ease-out;
+}
+#rbScannerFlash .check {
+    font-size: 90px;
+    line-height: 1;
+}
+#rbScannerFlash .label {
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+#rbScannerFlash .checkpoint-name {
+    font-size: 16px;
+    font-weight: 600;
+    opacity: 0.95;
+}
+@keyframes flashIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+.scan-result {
+    display: none;
+    background: rgba(34, 197, 94, 0.2);
+    border: 1px solid #22c55e;
+    border-radius: 8px;
+    padding: 12px;
+    margin: 0 16px 16px;
+    color: #22c55e;
+    font-weight: 600;
+    text-align: center;
+}
+
+.checkpoints-card,
+.manual-card {
+    background: #14192e;
+    border-radius: 12px;
+    margin: 16px;
+    padding: 16px;
+    color: #fff;
+}
+.checkpoints-card h2,
+.manual-card h2 {
+    font-size: 15px;
+    margin: 0 0 12px;
+    color: #d4af37;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.checkpoint-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.checkpoint-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px;
+    background: #1e2442;
+    border-radius: 8px;
+    border-left: 3px solid #555;
+}
+.checkpoint-item.completed {
+    border-left-color: #22c55e;
+    background: rgba(34, 197, 94, 0.1);
+}
+.checkpoint-icon {
+    font-size: 20px;
+    color: #666;
+    width: 24px;
+    text-align: center;
+}
+.checkpoint-item.completed .checkpoint-icon {
+    color: #22c55e;
+}
+.checkpoint-name {
+    font-weight: 600;
+    font-size: 14px;
+}
+.checkpoint-order {
+    font-size: 12px;
+    color: #a0a8c0;
+}
+
+.manual-card select {
+    width: 100%;
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid #2a3155;
+    background: #1e2442;
+    color: #fff;
+    font-size: 14px;
+    margin-bottom: 10px;
+}
+.btn-manual {
+    width: 100%;
+    padding: 12px;
+    background: #d4af37;
+    color: #0a0e1a;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 15px;
+    cursor: pointer;
+}
+
+#loadingOverlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    color: #d4af37;
+    font-size: 16px;
+}
+#loadingOverlay.show {
+    display: flex;
+}
+</style>
+</head>
+<body>
+
+<header class="patrol-header">
+    <button class="patrol-back" onclick="history.back()">←</button>
+    <h1>🛡️ Patrol Scan</h1>
+</header>
+
+<div id="rbDutyBanner" style="display:none;"></div>
+
+<div class="progress-card">
+    <div class="progress-header">
+        <div>
+            <div style="font-size:13px;color:#a0a8c0;">Today's Progress</div>
+            <div class="progress-percent" id="patrolProgress">0%</div>
+        </div>
+    </div>
+    <div class="progress-bar">
+        <div class="progress-fill" id="patrolProgressBar" style="width: 0%;"></div>
+    </div>
+    <div class="progress-stats">
+        <span>Scanned: <b id="patrolScanned">0</b></span>
+        <span>Total: <b id="patrolTotal">0</b></span>
+        <span>Remaining: <b id="patrolRemaining">0</b></span>
+    </div>
+</div>
+
+<div class="scanner-card">
+    <div class="scanner-frame" id="inCardPlaceholder">
+        <div id="scannerPlaceholder">
+            <span class="icon">📷</span>
+            <div>Tap "Start Scanner" below</div>
+        </div>
+    </div>
+    <div class="scanner-buttons">
+        <button class="btn-start" id="startScanBtn" onclick="startScanner()">▶ Start Scanner</button>
+    </div>
+</div>
+
+<div class="scan-result" id="scanResult">
+    <div id="scanSuccessText">—</div>
+</div>
+
+<div class="checkpoints-card">
+    <h2>Checkpoints</h2>
+    <div id="patrolCheckpointList">
+        <div class="empty-state" style="padding: 20px;">
+            <p>Loading...</p>
+        </div>
+    </div>
+</div>
+
+<div class="manual-card">
+    <h2>Manual Log</h2>
+    <select id="manualCheckpoint">
+        <option value="">-- Select Checkpoint --</option>
+    </select>
+    <button class="btn-manual" onclick="submitManualScan()">Log Checkpoint</button>
+</div>
+
+<div id="loadingOverlay">
+    <div id="loadingText">Loading...</div>
+</div>
+
+<div id="rbScannerOverlay">
+    <video id="rbScannerVideo" playsinline autoplay muted></video>
+
+    <div id="rbScannerFrame"></div>
+
+    <div id="rbScannerTop">
+        <div class="title">Scan Checkpoint QR</div>
+        <button id="rbScannerClose" onclick="stopScanner()">✕</button>
+    </div>
+
+    <div id="rbScannerBottom">
+        <span class="hint-icon">🎯</span>
+        Point the camera at the QR code
+    </div>
+
+    <div id="rbScannerFlash">
+        <div class="check">✓</div>
+        <div class="label">SCANNED</div>
+        <div class="checkpoint-name" id="rbFlashCheckpoint"></div>
+    </div>
+</div>
+
+<script src="js/vault.js"></script>
+<script src="js/biometric.js"></script>
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/offline.js"></script>
+<script src="js/app.js"></script>
+<script src="js/permissions.js"></script>
+<script src="js/shift-common.js"></script>
+<script src="js/jsqr.min.js"></script>
+<script src="js/patrol.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Duty banner
+    if (typeof RBShift !== 'undefined' && RBShift.injectBanner) {
+        RBShift.injectBanner();
     }
 
-    function showToast(msg, type) {
-        if (typeof RBApp !== 'undefined' && RBApp.showToast) {
-            RBApp.showToast(msg, type);
-        } else {
-            console.log('[patrol]', type, msg);
-        }
-    }
-
-    function showLoading(t) {
-        var l = $('loadingText'), o = $('loadingOverlay');
-        if (l) l.textContent = t || 'Loading...';
-        if (o) o.classList.add('show');
-    }
-    function hideLoading() {
-        var o = $('loadingOverlay');
-        if (o) o.classList.remove('show');
-    }
-
-    // ---- Init ----
-    function init() {
-        if (!RBAuth.requireLogin()) return;
-
-        var tid = parseInt(localStorage.getItem('rb_terminal_id') || '0', 10);
-        if (!tid) {
-            showToast('This phone is not bound to a terminal', 'warning');
-            setTimeout(function() { window.location.href = 'terminal-bind.html'; }, 600);
-            return;
-        }
-        _terminalId = tid;
-
-        loadHolder();
-        loadPoints();
-
-        setInterval(function() {
-            if (!document.hidden) {
-                loadHolder();
-                loadPoints(true);
-            }
-        }, 20000);
-    }
-
-    // ---- Holder ----
-    function loadHolder() {
-        return RBApi.getPatrolHolder(_terminalId)
-            .then(function(res) {
-                var data = (res && res.data) ? res.data : res;
-                _holder = data.current_guard || null;
-                renderHolder();
-            })
-            .catch(function() { /* silent */ });
-    }
-
-    function renderHolder() {
-        var nameEl = $('patrolHolderName');
-        if (!nameEl) return;
-        if (_holder) {
-            nameEl.textContent = _holder.full_name + ' · since ' + fmtTime(_holder.since);
-            nameEl.style.color = '#10b981';
-        } else {
-            nameEl.textContent = 'No one — tap CHANGE to start a round';
-            nameEl.style.color = '#f59e0b';
-        }
-    }
-
-    function openHolderPicker() {
-        // Simplest UX: prompt-based for now, upgrade to a modal later.
-        RBApi.getGuardRoster(_terminalId)
-            .then(function(res) {
-                var data = (res && res.data) ? res.data : res;
-                var guards = (data && data.guards) || [];
-
-                var names = guards.map(function(g, i) {
-                    return (i + 1) + '. ' + g.full_name + ' (' + g.employee_code + ')';
-                }).join('\n');
-
-                var choice = prompt(
-                    'Who is taking the patrol phone?\n\n' + names +
-                    '\n\nEnter number (1-' + guards.length + '):'
-                );
-                if (!choice) return;
-
-                var idx = parseInt(choice, 10) - 1;
-                if (idx < 0 || idx >= guards.length) return;
-                var g = guards[idx];
-
-                var pin = prompt('Enter ' + g.full_name + '\'s PIN:');
-                if (!pin) return;
-
-                showLoading('Checking out...');
-                RBApi.patrolCheckout({
-                    terminal_id: _terminalId,
-                    guard_id:    g.guard_id,
-                    pin:         pin
-                })
-                .then(function() {
-                    hideLoading();
-                    showToast('✅ ' + g.full_name + ' on patrol', 'success');
-                    loadHolder();
-                })
-                .catch(function(err) {
-                    hideLoading();
-                    showToast((err && err.error) || 'Checkout failed', 'error');
-                });
-            });
-    }
-
-    // ---- Points ----
-    function loadPoints(silent) {
-        return RBApi.getPatrolPoints()
-            .then(function(res) {
-                var data = (res && res.data) ? res.data : res;
-                _points = (data && data.points) || [];
-                renderPoints();
-            })
-            .catch(function(err) {
-                if (!silent) showToast('Failed to load checkpoints', 'error');
-            });
-    }
-
-    function renderPoints() {
-        // Update progress
-        var scanned = _points.filter(function(p) { return p.scans_today > 0; }).length;
-        var total   = _points.length;
-        var pct     = total ? Math.round(100 * scanned / total) : 0;
-
-        var pctEl = $('patrolProgress');
-        if (pctEl) pctEl.textContent = pct + '%';
-        var barEl = $('patrolProgressBar');
-        if (barEl) barEl.style.width = pct + '%';
-        var scannedEl = $('patrolScanned');
-        if (scannedEl) scannedEl.textContent = scanned;
-        var totalEl = $('patrolTotal');
-        if (totalEl) totalEl.textContent = total;
-        var remainEl = $('patrolRemaining');
-        if (remainEl) remainEl.textContent = total - scanned;
-
-        // Update list
-        var listEl = $('patrolCheckpointList');
-        if (!listEl) return;
-
-        var html = '';
-        _points.forEach(function(p) {
-            var done = p.scans_today > 0;
-            html +=
-                '<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;margin-bottom:8px;background:linear-gradient(145deg,#1f1f33,#141424);border-left:4px solid ' + (done ? '#10b981' : '#4b5563') + ';border-radius:10px;' + (done ? '' : 'opacity:0.9;') + '">' +
-                  '<div style="font-size:22px;">' + (done ? '✅' : '⚪') + '</div>' +
-                  '<div style="flex:1;min-width:0;">' +
-                    '<div style="font-size:14px;font-weight:700;color:#fff;">' + esc(p.name) + '</div>' +
-                    '<div style="font-size:11px;color:#8892b0;margin-top:2px;">' +
-                      esc(p.code) +
-                      (done ? ' · last scan ' + fmtTime(p.last_scan_at) : '') +
-                    '</div>' +
-                  '</div>' +
+    // Initialize the patrol controller
+    if (typeof RBPatrolScan !== 'undefined' && RBPatrolScan.init) {
+        RBPatrolScan.init();
+    } else {
+        console.error('[patrol-scan] RBPatrolScan is not defined. Check js/patrol.js loaded.');
+        var list = document.getElementById('patrolCheckpointList');
+        if (list) {
+            list.innerHTML = '<div style="padding:20px;color:#ef4444;font-size:13px;">' +
+                '⚠ Patrol module failed to load. Check that js/patrol.js is included.' +
                 '</div>';
-        });
-        listEl.innerHTML = html;
-    }
-
-    // ---- Scan a post ----
-    function logScan(postCode, notes) {
-        if (!_holder) {
-            if (!confirm('No one has checked out the patrol phone. Log scan anyway?')) return;
         }
+    }
+});
 
-        showLoading('Logging scan...');
-        getGPS().then(function(coords) {
-            return RBApi.patrolScan({
-                post_code:   postCode,
-                terminal_id: _terminalId,
-                gps_lat:     coords ? coords.lat : null,
-                gps_lng:     coords ? coords.lng : null,
-                notes:       notes || ''
-            });
-        })
-        .then(function(res) {
-            hideLoading();
-            var data = (res && res.data) ? res.data : res;
-            if (navigator.vibrate) navigator.vibrate(100);
-            showToast('✅ ' + data.post_name + ' scanned', 'success');
-            loadPoints(true);
-        })
-        .catch(function(err) {
-            hideLoading();
-            showToast((err && err.error) || 'Scan failed', 'error');
-        });
+/* ============================================================
+   QR SCANNER — uses jsQR (already loaded via js/jsQR.min.js)
+   ============================================================ */
+var _rbScanStream = null;
+var _rbScanInterval = null;
+var _rbLastQR = '';
+
+function startScanner() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert('Camera not supported on this device');
+        return;
     }
 
-    function getGPS() {
-        return new Promise(function(resolve) {
-            if (!navigator.geolocation) return resolve(null);
-            navigator.geolocation.getCurrentPosition(
-                function(pos) { resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }); },
-                function() { resolve(null); },
-                { timeout: 5000 }
-            );
-        });
+    var overlay = document.getElementById('rbScannerOverlay');
+    var video = document.getElementById('rbScannerVideo');
+    var canvas = document.createElement('canvas');
+    var ctx = canvas.getContext('2d');
+
+    overlay.classList.add('show');
+    _rbLastQR = '';
+
+    navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' },
+        audio: false
+    }).then(function(stream) {
+        _rbScanStream = stream;
+        video.srcObject = stream;
+        video.setAttribute('playsinline', true);
+        video.play();
+
+        _rbScanInterval = setInterval(function() {
+            if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
+            if (video.videoWidth === 0) return;
+
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            if (typeof jsQR !== 'function') return;
+
+            var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            var code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' });
+
+            if (code && code.data && code.data !== _rbLastQR) {
+                _rbLastQR = code.data;
+                handleQRScanned(code.data);
+            }
+        }, 250);
+    }).catch(function(err) {
+        alert('Cannot access camera: ' + err.message);
+        overlay.classList.remove('show');
+    });
+}
+
+function stopScanner() {
+    if (_rbScanInterval) { clearInterval(_rbScanInterval); _rbScanInterval = null; }
+    if (_rbScanStream) {
+        _rbScanStream.getTracks().forEach(function(t) { t.stop(); });
+        _rbScanStream = null;
+    }
+    var overlay = document.getElementById('rbScannerOverlay');
+    if (overlay) overlay.classList.remove('show');
+}
+
+function handleQRScanned(qrText) {
+    // Beep
+    try {
+        var ctx = new (window.AudioContext || window.webkitAudioContext)();
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.frequency.value = 1200;
+        gain.gain.value = 0.2;
+        osc.start();
+        osc.stop(ctx.currentTime + 0.15);
+    } catch (e) {}
+
+    if (navigator.vibrate) navigator.vibrate(100);
+
+    // Show flash
+    var flash = document.getElementById('rbScannerFlash');
+    var flashName = document.getElementById('rbFlashCheckpoint');
+    if (flashName) flashName.textContent = qrText;
+    if (flash) flash.classList.add('show');
+
+    // Call controller
+    if (typeof RBPatrolScan !== 'undefined' && RBPatrolScan.onQRScanned) {
+        RBPatrolScan.onQRScanned(qrText);
     }
 
-    // ---- QR scan entry (called by your existing camera/QR scanner) ----
-    function onQRScanned(qrText) {
-        // QR format: RB-POST:<post_code>  or  just <post_code>
-        var code = String(qrText || '').trim();
-        if (code.indexOf('RB-POST:') === 0) code = code.substring(8);
+    // Close scanner after brief flash
+    setTimeout(function() {
+        if (flash) flash.classList.remove('show');
+        stopScanner();
+    }, 900);
+}
 
-        if (!code) return;
-        logScan(code);
+function submitManualScan() {
+    if (typeof RBPatrolScan !== 'undefined' && RBPatrolScan.submitManualScan) {
+        RBPatrolScan.submitManualScan();
     }
+}
+</script>
 
-    function fmtTime(iso) {
-        if (!iso) return '—';
-        var t = new Date(iso.replace(' ', 'T')).getTime();
-        if (isNaN(t)) return '—';
-        var diff = Math.floor((Date.now() - t) / 1000);
-        if (diff < 60) return diff + 's ago';
-        if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
-        return Math.floor(diff / 3600) + 'h ago';
-    }
-
-    return {
-        init:             init,
-        loadPoints:       loadPoints,
-        logScan:          logScan,
-        onQRScanned:      onQRScanned,
-        openHolderPicker: openHolderPicker
-    };
-})();
+</body>
+</html>
